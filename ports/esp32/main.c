@@ -61,6 +61,11 @@
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
 #endif
+#include "driver/i2c.h"
+
+
+
+
 
 // MicroPython runs as a task under FreeRTOS
 #define MP_TASK_PRIORITY        (ESP_TASK_PRIO_MIN + 1)
@@ -70,6 +75,37 @@ int vprintf_null(const char *format, va_list ap) {
     // do nothing: this is used as a log target during raw repl mode
     return 0;
 }
+
+
+void kb_event_poll (void *pvParameter) {
+  
+  uint32_t io_num;
+    for(;;) {
+        if(xQueueReceive(kbd_queue, &io_num, portMAX_DELAY)) {
+	 
+	  uint8_t input = 0;
+	  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+	  cmd = i2c_cmd_link_create();
+	  i2c_master_start(cmd);
+	  i2c_master_write_byte(cmd, 4 << 1  | I2C_MASTER_READ, ACK_CHECK_DIS);
+	  i2c_master_read_byte(cmd, &input, NACK_VAL);
+	  i2c_master_stop(cmd);
+	  i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
+	  i2c_cmd_link_delete(cmd);
+	  if (input == mp_interrupt_char) {
+	    mp_keyboard_interrupt();
+	  } else {
+	    // this is an inline function so will be in IRAM                                                                  
+	    ringbuf_put(&stdin_ringbuf, input);
+
+	  }
+	  
+
+        }
+    }
+}
+
+
 
 void mp_task(void *pvParameter) {
     volatile uint32_t sp = (uint32_t)get_sp();
@@ -117,7 +153,9 @@ soft_reset:
 
     // initialise peripherals
     machine_pins_init();
-
+    // init uart again here (hook interrupt?)
+    uart_init();
+    
     // run boot-up scripts
     pyexec_frozen_module("_boot.py");
     pyexec_file_if_exists("boot.py");
@@ -168,7 +206,10 @@ void app_main(void) {
         nvs_flash_erase();
         nvs_flash_init();
     }
+    kbd_queue = xQueueCreate(10, sizeof(uint32_t));
+    xTaskCreate(kb_event_poll, "gpio_task_example", 2048, NULL,  ESP_TASK_PRIO_MIN + 1, NULL);
     xTaskCreatePinnedToCore(mp_task, "mp_task", MP_TASK_STACK_SIZE / sizeof(StackType_t), NULL, MP_TASK_PRIORITY, &mp_main_task_handle, MP_TASK_COREID);
+    
 }
 
 void nlr_jump_fail(void *val) {

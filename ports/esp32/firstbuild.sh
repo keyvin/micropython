@@ -9,19 +9,17 @@ sudo pip install -r requirements.txt
 ./install.sh
 
 
-
-
-
-
-
-
 echo "Adding user to dialout - will need to re-login to get access to com devices"
 sudo adduser $USER dialout
 echo "Installing picocom"
 sudo apt install picocom
+
+echo -e "\e[32m"
+echo && echo
 
 echo "use make board=GENERIC-SPIRAM to build spiram version"
 echo "If this script finished with no errors"
 echo "import idf tools -\". ~/esp-idf/exports.h \""
 echo "make && make deploy"
 echo "picocom -b 115200 /dev/ttyUSB0"
+echo -e "\e[0m"

@@ -2,19 +2,22 @@ pushd ~/
 
 git clone https://github.com/espressif/esp-idf.git
 cd esp-idf
-curl https://bootstrap.pypa.io/get-pip.py --output get-pip.py
+
+
 
 git checkout 4c81978a3e2220674a432a588292a4c860eef27b
 git submodule --init --recursive
 
 
 echo -e "\e[31minstalling python requirements via pip\e[0m"
+sudo apt install python2 curl python-is-python2
+curl https://bootstrap.pypa.io/get-pip.py --output get-pip.py
 sudo python2 get-pip.py
 sudo apt install python-pip-whl
 sudo apt-get install python3-venv
 pip install --upgrade virtualenv==16.7.9
 sudo pip install -r requirements.txt
-./install.sh
+bash install.sh
 
 popd
 
@@ -39,7 +42,7 @@ make
 popd
 
 echo && echo
-
+echo -e "\e[32m"
 
 echo "use make board=GENERIC-SPIRAM to build spiram version"
 echo "If this script finished with no errors.."

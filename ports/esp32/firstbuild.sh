@@ -1,3 +1,6 @@
+echo -e "\e[31mUpdating system\e[0m"
+sudo apt update
+sudo apt upgrade
 pushd ~/
 
 git clone https://github.com/espressif/esp-idf.git
@@ -28,7 +31,7 @@ pip3 install -r ~/esp-idf/requirements.txt
 
 python3 -m venv build-venv
 source build-venv/bin/activate
-
+sudo pip3 install -r ~/esp-idf/requirements.txt
 
 echo -e "\e[31mAdding user to dialout - will need to re-login to get access to com devices\e[0m"
 sudo adduser $USER dialout
@@ -37,10 +40,14 @@ sudo apt install picocom
 
 echo -e "\e[0m"
 git submodule update --init
+
 pushd ../../mpy-cross/
 make
 popd
 
+pushd ~/esp-idf/
+git submodule update --init
+popd
 echo && echo
 echo -e "\e[32m"
 

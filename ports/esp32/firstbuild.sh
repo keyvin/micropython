@@ -47,4 +47,6 @@ echo "source ~/esp-idf/exports.h  #imports esp tools"
 echo "#source build-venv/bin/activate #import venv" 
 echo "make && make deploy"
 echo "picocom -b 115200 /dev/ttyUSB0"
+echo "make BOARD=GENERIC_SPIRAM USER_C_MODULES=../../modules CFLAGS_EXTRA=-DMODULE_OUTPUT_ENABLED=1 all"
+
 echo -e "\e[0m"

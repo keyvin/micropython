@@ -1,6 +1,7 @@
 echo -e "\e[31mUpdating system\e[0m"
 sudo apt update
 sudo apt upgrade
+sudo apt install build-essential
 pushd ~/
 
 git clone https://github.com/espressif/esp-idf.git

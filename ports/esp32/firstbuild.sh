@@ -53,10 +53,17 @@ echo -e "\e[32m"
 
 echo "use make board=GENERIC-SPIRAM to build spiram version"
 echo "If this script finished with no errors.."
-echo "source ~/esp-idf/exports.h  #imports esp tools"
-echo "#source build-venv/bin/activate #import venv" 
-echo "make && make deploy"
-echo "picocom -b 115200 /dev/ttyUSB0"
-echo "make BOARD=GENERIC_SPIRAM USER_C_MODULES=../../modules CFLAGS_EXTRA=-DMODULE_OUTPUT_ENABLED=1 all"
 
+echo "#source build-venv/bin/activate #import venv" 
+
+
+echo "source ~/esp-idf/exports.h  #imports esp tools"
+echo "make BOARD=GENERIC_SPIRAM USER_C_MODULES=../../modules CFLAGS_EXTRA=-DMODULE_OUTPUT_ENABLED=1 all"
+echo "make BOARD=GENERIC_SPIRAM deploy"
+echo "or run buildit.sh"
+echo "ON WSL - check com ports, tty device will be /dev/ttyS(COM#)"
+echo "You can set this in (m)akefile - note the case"
+echo "On WSL you must run make deploy with BAUD=115200, or flashing will fail"
+echo "picocom -b 115200 /dev/ttyS(com no)"
+echo "WROVER dev boards - port will always be highest USB or COM
 echo -e "\e[0m"

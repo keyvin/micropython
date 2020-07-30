@@ -46,7 +46,9 @@
 #include "extmod/misc.h"
 #include "lib/utils/pyexec.h"
 #include "mphalport.h"
+//#include "output.h"
 
+extern void output_call_callback(const char *, uint32_t);
 TaskHandle_t mp_main_task_handle;
 
 STATIC uint8_t stdin_ringbuf_array[256];
@@ -109,7 +111,8 @@ void mp_hal_stdout_tx_str(const char *str) {
 
 void mp_hal_stdout_tx_strn(const char *str, uint32_t len) {
     // Only release the GIL if many characters are being sent
-    bool release_gil = len > 20;
+  output_call_callback(str, len);
+  bool release_gil = len > 20;
     if (release_gil) {
         MP_THREAD_GIL_EXIT();
     }

@@ -66,5 +66,5 @@ echo "ON WSL - check com ports, tty device will be /dev/ttyS(COM#)"
 echo "You can set this in (m)akefile - note the case"
 echo "On WSL you must run make deploy with BAUD=115200, or flashing will fail"
 echo "picocom -b 115200 /dev/ttyS(com no)"
-echo "WROVER dev boards - port will always be highest USB or COM
+echo "WROVER dev boards - port will always be highest USB or COM (0 is jtag, 1 is usb tty"
 echo -e "\e[0m"

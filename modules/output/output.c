@@ -10,19 +10,16 @@
 #include "modesp32.h"
 #include <stdio.h>
 
-// This is the function which will be called from Python as example.add_ints(a, b).
+
 
 
 int was_set = 0;
-
-
 STATIC mp_obj_t set_print(mp_obj_t fun)
 {
-  //if (mp_obj_is_fun(fun)){
+
+  if (fun == mp_const_none)
+    was_set = 0;
     MP_STATE_PORT(output_func) = fun;
-    //  return fun;
-    //}
-    //mp_raise_ValueError(MP_ERROR_TEXT("Must be set equal to a function!!!"));
     was_set = 1;
     return mp_const_none;
   //output_func = NULL;
@@ -33,7 +30,6 @@ void output_call_callback(const char *string, uint32_t len)
 {
   //  #mp_obj_t of = mp_load_global(qstr_from_str("output_fun"));
   if ( was_set == 1){
-    vstr_t vstr;
     if (strlen(string) == 0)
       return;
 
@@ -47,6 +43,16 @@ void output_call_callback(const char *string, uint32_t len)
 // Define a Python reference to the function above
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(set_print_obj, set_print);
 
+//This function disables serial output. 
+STATIC mp_obj_t disable_uart_output(mp_obj_t disable_uart_output) {
+  mp_obj_t ret = mp_const_none;
+  return ret;
+
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(disable_uart_obj, disable_uart_output);
+
+
 // Define all properties of the example module.
 // Table entries are key/value pairs of the attribute name (a string)
 // and the MicroPython object reference.
@@ -54,7 +60,8 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(set_print_obj, set_print);
 // optimized to word-sized integers by the build system (interned strings).
 STATIC const mp_rom_map_elem_t output_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_output) },
-    { MP_ROM_QSTR(MP_QSTR_set_print), MP_ROM_PTR(&set_print_obj) }
+    { MP_ROM_QSTR(MP_QSTR_set_print), MP_ROM_PTR(&set_print_obj) },
+    { MP_ROM_QSTR(MP_QSTR_disable_uart_output), MP_ROM_PTR(&disable_uart_obj)}
 
 };
 

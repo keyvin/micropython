@@ -117,14 +117,14 @@ endif
 
 # Support BLE by default.
 # Can be explicitly disabled on the command line or board config.
-MICROPY_PY_BLUETOOTH ?= 1
+MICROPY_PY_BLUETOOTH ?= 0
 ifeq ($(MICROPY_PY_BLUETOOTH),1)
 SDKCONFIG += boards/sdkconfig.ble
 
 # Use NimBLE on ESP32.
-MICROPY_BLUETOOTH_NIMBLE ?= 1
+MICROPY_BLUETOOTH_NIMBLE ?= 0
 # Use Nimble bindings, but ESP32 IDF provides the Nimble library.
-MICROPY_BLUETOOTH_NIMBLE_BINDINGS_ONLY = 1
+MICROPY_BLUETOOTH_NIMBLE_BINDINGS_ONLY = 0
 include $(TOP)/extmod/nimble/nimble.mk
 endif
 

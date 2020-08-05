@@ -46,9 +46,9 @@
 #include "extmod/misc.h"
 #include "lib/utils/pyexec.h"
 #include "mphalport.h"
-//#include "output.h"
+#include "output.h"
 
-extern void output_call_callback(const char *, uint32_t);
+//extern void output_call_callback(const char *, uint32_t);
 TaskHandle_t mp_main_task_handle;
 
 STATIC uint8_t stdin_ringbuf_array[256];

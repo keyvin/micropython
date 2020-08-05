@@ -36,7 +36,7 @@
 
 
 
-xQueueHandle kbd_queue;
+
 void uart_init(void);
 
 #endif // MICROPY_INCLUDED_ESP32_UART_H

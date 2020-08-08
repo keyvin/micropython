@@ -305,25 +305,7 @@ class ILI9341:
         if written<len(text):
             curx = self.chars(text[written:], curx,cury)
         self._x = curx; self._y = cury
-    def print_no_ret(self, text):
-        cury = self._y; curx = self._x
-        char_h = self._font.height()
-        char_w = self._font.max_width()
-        lines = text.split('\n')
-        for line in lines:
-            words = line.split(' ')
-            for word in words:
-                if curx + self._font.get_width(word) >= self.width:
-                    curx = self._x; cury = self.next_line(cury,char_h)
-                    while self._font.get_width(word) > self.width:
-                        self.chars(word[:self.width//char_w],curx,cury)
-                        word = word[self.width//char_w:]
-                        cury = self.next_line(cury,char_h)
-                if len(word)>0:
-                    curx = self.chars(word+' ', curx,cury)
-            curx = self._x; 
-        self._x = curx
-        self._y = cury
+
 
     def print(self, text): #does word wrap, leaves self._x unchanged
         cury = self._y; curx = self._x

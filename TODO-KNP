@@ -1,6 +1,8 @@
-1. Create module for input - allow python to put characters into the input ringbuffer
+//1. Create module for input - allow python to put characters into the input ringbuffer
 2. Output module and input module - turn callbacks on and off. 
+
 3. C driver for ILI9xxx chipset (framebuffer library integration)
+   
 4. C Terminal Emulator that manipulates the framebuffer
-5. C VT 100 compatible Editor.
+5. C VT 100 compatible Editor? 
 

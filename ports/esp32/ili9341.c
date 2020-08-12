@@ -1,3 +1,4 @@
+
 /* SPI Master example
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
@@ -14,7 +15,9 @@
 #include "esp_system.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
-
+spi_device_handle_t spi_handle;
+uint8_t ili9xx_inited;
+uint16_t *lines[2];
 //#include "pretty_effect.h"
 
 /*
@@ -287,7 +290,7 @@ void lcd_init(spi_device_handle_t spi)
  * sent faster (compared to calling spi_device_transmit several times), and at
  * the mean while the lines for next transactions can get calculated.
  */
-static void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_t ex, uint16_t ey, uint16_t *linedata)
+void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_t ex, uint16_t ey, uint16_t *linedata)
 {
     esp_err_t ret;
     int x;
@@ -337,6 +340,28 @@ static void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_
     //send_line_finish, which will wait for the transfers to be done and check their status.
 }
 
+//slow and unoptimized
+void blit_rect(uint16_t *data, int sx, int sy, int ex, int ey) {
+  //we perform no checks.
+  //we cannot malloc enough space for the entire screen in DMA capable memory
+  //printf("got this far - blit_rect\n");
+  int total_size = (ey-sy)*(ex-sx);
+  if (total_size > MAX_RECT){
+    //well .. foobar
+    //send in alternating lines? Blocks? Probably a quick heuristic could go here
+
+  }
+  //safely copy to a single buffer.
+  else {
+    //    printf("%ls, total_size %d\n", lines[0], total_size);    
+    memcpy(lines[0],data, sizeof(uint16_t)*total_size);
+    send_lines(spi_handle, sx, sy,ex,ey, lines[0]);
+
+  }
+   
+
+
+}
 
 static void send_line_finish(spi_device_handle_t spi)
 {
@@ -351,19 +376,16 @@ static void send_line_finish(spi_device_handle_t spi)
 }
 
 
+
 //Simple routine to generate some patterns and send them to the LCD. Don't expect anything too
 //impressive. Because the SPI driver handles transactions in the background, we can calculate the next line
 //while the previous one is being sent.
 static void display_pretty_colors(spi_device_handle_t spi)
 {
     uint16_t *lines[2];
-    //Allocate memory for the pixel buffers
-    for (int i=0; i<2; i++) {
-        lines[i]=heap_caps_malloc(MAX_RECT*sizeof(uint16_t), MALLOC_CAP_DMA);
-        assert(lines[i]!=NULL);
-    }
+    
     int frame=0;
-    //Indexes of the line currently being sent to the LCD and the line we're calculating.
+   //Indexes of the line currently being sent to the LCD and the line we're calculating.
     int sending_line=-1;
     int calc_line=0;
     int sy = 0;
@@ -413,9 +435,7 @@ static void display_pretty_colors(spi_device_handle_t spi)
 	    }
             //The line set is queued up for sending now; the actual sending happens in the
             //background. We can go on to calculate the next line set as long as we do not
-            //touch line[sending_line]; the SPI sending process is still reading from that.
-
-	    
+            //touch line[sending_line]; the SPI sending process is still reading from that.	    
 	      
         }
 	//vTaskDelay(100 / portTICK_RATE_MS);
@@ -435,10 +455,10 @@ static void display_pretty_colors(spi_device_handle_t spi)
     }
 }
 
-void spi_task()
+
+void spi_init()
 {
     esp_err_t ret;
-    spi_device_handle_t spi;
     spi_bus_config_t buscfg={
         .miso_io_num=PIN_NUM_MISO,
         .mosi_io_num=PIN_NUM_MOSI,
@@ -463,14 +483,20 @@ void spi_task()
     ret=spi_bus_initialize(HSPI_HOST, &buscfg, 1);
     ESP_ERROR_CHECK(ret);
     //Attach the LCD to the SPI bus
-    ret=spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
+    ret=spi_bus_add_device(HSPI_HOST, &devcfg, &spi_handle);
     ESP_ERROR_CHECK(ret);
     //Initialize the LCD
-    lcd_init(spi);
+    lcd_init(spi_handle);
+
+
     //Initialize the effect displayed
 //    ret=pretty_effect_init();
     ESP_ERROR_CHECK(ret);
-
+//Allocate memory for the pixel buffers
+    for (int i=0; i<2; i++) {
+        lines[i]=heap_caps_malloc(MAX_RECT*sizeof(uint16_t), MALLOC_CAP_DMA);
+        assert(lines[i]!=NULL);
+    }
     //Go do nice stuff.
-    display_pretty_colors(spi);
+    //display_pretty_colors(spi);
 }

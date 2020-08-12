@@ -1,0 +1,9 @@
+import framebuf
+import ili9341gfx
+barray= bytearray(50*50*2)
+fb = framebuf.FrameBuffer(barray, 50, 50, framebuf.RGB565)
+ili9341gfx.screen_blit(barray)
+
+for i in range(100):
+    fb.fill(0x1a1b)
+    ili9341gfx.screen_blit(barray, 50,50,(10*i)%10, 10+(i*25)%5)

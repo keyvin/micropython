@@ -167,7 +167,7 @@ soft_reset:
     fflush(stdout);
     goto soft_reset;
 }
-extern void spi_task();
+extern void spi_init();
 
 void app_main(void) {
     esp_err_t ret = nvs_flash_init();
@@ -175,7 +175,9 @@ void app_main(void) {
         nvs_flash_erase();
         nvs_flash_init();
     }
-    xTaskCreatePinnedToCore(spi_task, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0); 
+    //  should set this up for a background driver. Just call init for now
+    spi_init();
+    //    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0); 
     xTaskCreatePinnedToCore(mp_task, "mp_task", MP_TASK_STACK_SIZE / sizeof(StackType_t), NULL, MP_TASK_PRIORITY, &mp_main_task_handle, MP_TASK_COREID);
     
 }

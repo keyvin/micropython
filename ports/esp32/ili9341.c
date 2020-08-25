@@ -157,7 +157,7 @@ void lcd_init(spi_device_handle_t spi)
     }
 
     ///Enable backlight
-    gpio_set_level(PIN_NUM_BCKL, 0);
+    gpio_set_level(PIN_NUM_BCKL, 1);
 }
 
 

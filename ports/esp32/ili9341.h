@@ -7,6 +7,7 @@ void blit_rect(uint16_t *, int, int, int, int);
 spi_device_handle_t spi_handle;
 uint8_t ili9xx_inited;
 uint16_t *lines[2];
+
 enum gfx_mode {FULL_TEXT, PARTIAL_TEXT, BLIT_RECT, BLIT_LINES, BUFFERED};
 #define PIN_NUM_MISO 25
 #define PIN_NUM_MOSI 23

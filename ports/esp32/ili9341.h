@@ -2,23 +2,37 @@
 #define ILI9341_h 1
 #include "driver/spi_master.h"
 #include "esp_system.h"
-
+#define FONT_SIZE 16
+//this address comes from main. espressif high mem will not work with micropython. Steal 1mb of space
+//can reduce to 512kb at later point. 
+static void *gfx_high = (void *)0x3f800000 + (3*1024*1024);
+//frees buffers (if allocated), clear screen, initialize cursor position
+//generate font at high GFX memory. It starts at memory reigon
+void spi_init();
+void start_text_mode();
 void blit_rect(uint16_t *, int, int, int, int);
+void set_rect(uint16_t, uint16_t);
+void get_char(uint16_t *, int);
 spi_device_handle_t spi_handle;
 uint8_t ili9xx_inited;
+//buffers would be a bettername for this. Two buffers - one being sent via DMA/FIFO, one being filled for next transfer
 uint16_t *lines[2];
 
-enum gfx_mode {FULL_TEXT, PARTIAL_TEXT, BLIT_RECT, BLIT_LINES, BUFFERED};
+enum GFX_MODE {FULL_TEXT, PARTIAL_TEXT, BLIT_RECT, BLIT_LINES, BUFFERED};
+
+enum GFX_MODE gfx_mode;
 #define PIN_NUM_MISO 25
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  19
 #define PIN_NUM_CS   22
-
 #define PIN_NUM_DC   21
 #define PIN_NUM_RST  18
 #define PIN_NUM_BCKL 5
 
-#define MAX_RECT 50*50 
+#define MAX_RECT 50*50
+#define MAX_LINES 16 //320 width
+
+
 
 /*
  The LCD needs a bunch of command/argument values to be initialized. They are stored in this struct.

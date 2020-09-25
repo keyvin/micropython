@@ -44,6 +44,22 @@
  */
 
 
+void start_text_mode() {
+  gfx_mode = FULL_TEXT;
+  if (lines[0])
+    free(lines[0]);
+  if (lines[1])
+    free(lines[1]);
+  for (int i=0; i<2; i++) {
+    lines[i]=heap_caps_malloc( MAX_LINES * (320 *sizeof(uint16_t)), MALLOC_CAP_DMA);
+    assert(lines[i]!=NULL);
+  }
+  //generate fonts at gfx_high_mem
+  for (uint8_t glyph = 0; glyph < 0x7F; glyph++)
+    get_char( ((uint16_t *)gfx_high) + (FONT_SIZE*FONT_SIZE)*glyph, glyph);
+  
+}
+
 void get_char(uint16_t *buffer, int ord) {
   int x,y;
   int set;
@@ -156,8 +172,8 @@ void lcd_init(spi_device_handle_t spi)
         cmd++;
     }
 
-    ///Enable backlight
-    gpio_set_level(PIN_NUM_BCKL, 1);
+    ///Enable backlight - 0 for dev board, 1 for regular
+    gpio_set_level(PIN_NUM_BCKL, 0);
 }
 
 
@@ -343,7 +359,7 @@ void spi_init()
         .sclk_io_num=PIN_NUM_CLK,
         .quadwp_io_num=-1,
         .quadhd_io_num=-1,
-        .max_transfer_sz=MAX_RECT*2+8
+        .max_transfer_sz=16*320*2
     };
     spi_device_interface_config_t devcfg={
 #ifdef CONFIG_LCD_OVERCLOCK
@@ -371,27 +387,35 @@ void spi_init()
 //    ret=pretty_effect_init();
     ESP_ERROR_CHECK(ret);
 //Allocate memory for the pixel buffers
-    for (int i=0; i<2; i++) {
-        lines[i]=heap_caps_malloc(MAX_RECT*sizeof(uint16_t), MALLOC_CAP_DMA);
-        assert(lines[i]!=NULL);
-    }
-    get_char(lines[0], 0x20);
+    //for (int i=0; i<2; i++) {
+    //    lines[i]=heap_caps_malloc(MAX_RECT*sizeof(uint16_t), MALLOC_CAP_DMA);
+    //    assert(lines[i]!=NULL);
+    //}
+    start_text_mode();
+    //get_char(lines[0], 0x20);
     uint16_t *flip = lines[0];
     uint16_t *flop = lines[1];
     uint16_t *tmp;
+    int line_length = 19;
     for (int k = 0; k < 91; k++){
-    for (int x = 0; x<7;x++){
-      for (int y = 0; y < 13; y++){
-	blit_rect(flip, (16*x),(16*y),(16*x)+15,(16*y)+16);
-	blit_rect(flip, (16*x)+140,(16*y),(16*x)+15+140,(16*y)+16);
-	get_char(flop, ((x*13)+y+1+k)%91+0x20);
+    
+      for (int y = 0; y < 15; y++){
+	  send_lines(spi_handle, 0 , (16*y), line_length*16, (16*y)+16, flop);
+	for (int x = 0; x< line_length; x++) {
+	
+	  //blit_rect(flip, (16*x)+140,(16*y),(16*x)+15+140,(16*y)+16);
+	  int glyph = (k+y)%91 + 0x20; 
+	  uint16_t *char_loc = ((uint16_t *) gfx_high) + (glyph * FONT_SIZE*FONT_SIZE)-FONT_SIZE;
+	  for (int j = 0; j < 16; j++)
+	    memcpy(flop + (j+j*((line_length)*16) + (x*16)),  char_loc+(j*16), sizeof(uint16_t) * FONT_SIZE);
+	}
 	send_line_finish(spi_handle);
 	tmp = flip;
 	flip = flop;
 	flop = flip;
       }
     }
-    }
+    
     //Go do nice stuff.
     //display_pretty_colors(spi);
 }

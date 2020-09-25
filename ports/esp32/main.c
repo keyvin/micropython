@@ -57,6 +57,7 @@
 #include "modmachine.h"
 #include "modnetwork.h"
 #include "mpthreadport.h"
+#include "ili9341.h"
 
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
@@ -93,7 +94,7 @@ void mp_task(void *pvParameter) {
             break;
         case ESP_SPIRAM_SIZE_32MBITS:
         case ESP_SPIRAM_SIZE_64MBITS:
-            mp_task_heap_size = 4 * 1024 * 1024;
+            mp_task_heap_size = 3 * 1024 * 1024;
             break;
         default:
             // No SPIRAM, fallback to normal allocation
@@ -167,9 +168,7 @@ soft_reset:
     fflush(stdout);
     goto soft_reset;
 }
-extern void spi_init();
-extern void init_screen();
-extern void start_pump();
+
 void app_main(void) {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -177,11 +176,11 @@ void app_main(void) {
         nvs_flash_init();
     }
     //  should set this up for a background driver. Just call init for now
-    //    spi_init();
-    //    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0);
+        spi_init();
+	//    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0);
     //background composite
-    init_screen();
-    start_pump();
+    //init_screen();
+
     xTaskCreatePinnedToCore(mp_task, "mp_task", MP_TASK_STACK_SIZE / sizeof(StackType_t), NULL, MP_TASK_PRIORITY, &mp_main_task_handle, MP_TASK_COREID);
     
 }

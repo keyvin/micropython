@@ -355,7 +355,6 @@ SRC_C = \
 	machine_rtc.c \
 	machine_sdcard.c \
 	ili9341.c \
-	composite.c \
 	$(wildcard $(BOARD_DIR)/*.c) \
 	$(SRC_MOD)
 

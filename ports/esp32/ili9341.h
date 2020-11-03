@@ -13,12 +13,18 @@ void start_text_mode();
 void blit_rect(uint16_t *, int, int, int, int);
 void set_rect(uint16_t, uint16_t);
 void get_char(uint16_t *, int);
+static void send_line_finish(spi_device_handle_t);
 spi_device_handle_t spi_handle;
 uint8_t ili9xx_inited;
 //buffers would be a bettername for this. Two buffers - one being sent via DMA/FIFO, one being filled for next transfer
 uint16_t *lines[2];
 
 enum GFX_MODE {FULL_TEXT, PARTIAL_TEXT, BLIT_RECT, BLIT_LINES, BUFFERED};
+
+uint8_t text_console_line_length;
+uint8_t text_console_row;
+uint8_t text_console_column;
+
 
 enum GFX_MODE gfx_mode;
 #define PIN_NUM_MISO 25
@@ -243,5 +249,6 @@ static char font8x8_basic[128][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}    // U+007F
 };
 
+void send_lines(spi_device_handle_t, uint16_t,uint16_t, uint16_t, uint16_t, uint16_t *);
 
 #endif

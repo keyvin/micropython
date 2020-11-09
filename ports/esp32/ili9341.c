@@ -296,7 +296,7 @@ void blit_rect(uint16_t *data, int sx, int sy, int ex, int ey) {
 
   }
    
-
+  
 
 }
 
@@ -393,29 +393,57 @@ static void display_pretty_colors(spi_device_handle_t spi)
 
 void put_text_at(spi_device_handle_t spi_handle ,uint8_t row, uint8_t col, char *text, uint8_t len)
 {
-  uint16_t *flip = lines[0];
-  uint16_t *flop = lines[1];
-  uint16_t *tmp;
-  int line_length = 19;
   uint8_t multi_line = 0;
-  uint8_t last_line_len;
+  uint8_t last_line_len =0; 
+  uint8_t num_full_lines=0;
+  uint8_t current_line=0;
+  uint8_t first_line = 0;
   //single line vs. multi line send
-  if ((col + len) < line_length){
+  if ((col + len) < text_console_line_length){
     multi_line = 0;    
   }
   else {
-    multi_line = len - (line_length - col);
-    last_line_len = multi_line % line_length;
-    multi_line = (multi_line / line_length);
+    multi_line = 1;
+    first_line = text_console_line_length - col;
+    last_line_len = (len-first_line) % text_console_line_length;
+    num_full_lines = (len-first_line-last_line_len) / text_console_line_length;
+    //if (last_line_len)
+      //num_lines = num_lines;
   }
-
+  
   if (!multi_line){
-    fill_line(flip, text, len);
+    fill_line(lines[0], text, len);
     // void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_t ex, uint16_t ey, uint16_t *linedata)
     //    printf("
-    send_lines(spi_handle, col*FONT_SIZE, row*FONT_SIZE, (col+len)*FONT_SIZE,row*(FONT_SIZE+FONT_SIZE), flip);
+    send_lines(spi_handle, col*FONT_SIZE, row*FONT_SIZE, (col+len)*FONT_SIZE,row*FONT_SIZE+FONT_SIZE, lines[0]);
     send_line_finish(spi_handle);
     return;
+  }
+  
+  if (multi_line) {
+    fill_line(lines[0], text, first_line);
+    send_lines(spi_handle, col*FONT_SIZE, row*FONT_SIZE, (col+first_line)*FONT_SIZE, row*FONT_SIZE+FONT_SIZE, lines[current_line%2]);
+    //used to pick buffer on flips and flops.
+    current_line = 1;
+    row++;
+    text = text + first_line;
+    printf("first line:%d\nlast line%d\nnum_lines:%d\nline_length:%d\n", first_line, last_line_len, num_full_lines,text_console_line_length);
+    //start full line fills.
+    while (current_line <= num_full_lines){      
+      fill_line(lines[current_line%2], text, text_console_line_length);
+      send_line_finish(spi_handle);
+      send_lines(spi_handle,0,row*FONT_SIZE, (text_console_line_length)*FONT_SIZE, row*FONT_SIZE+FONT_SIZE, lines[current_line%2]);      
+      current_line++;
+      row++;
+      text = text + text_console_line_length;
+    }
+    if (last_line_len){
+      send_line_finish(spi_handle);
+      fill_line(lines[current_line%2], text, last_line_len);
+      send_lines(spi_handle,0,row*FONT_SIZE, last_line_len*FONT_SIZE, (row*FONT_SIZE)+FONT_SIZE, lines[current_line%2]);
+      send_line_finish(spi_handle);
+    }
+		 
   }
   //  send_lines(spi_handle, 0 , (16*y), line_length*16, (16*y)+16, flop);
   /*    for (int x = 0; x< line_length; x++) {
@@ -442,7 +470,7 @@ void spi_init()
         .sclk_io_num=PIN_NUM_CLK,
         .quadwp_io_num=-1,
         .quadhd_io_num=-1,
-        .max_transfer_sz=16*320*2
+        .max_transfer_sz=16*320*2*8
     };
     spi_device_interface_config_t devcfg={
 #ifdef CONFIG_LCD_OVERCLOCK
@@ -480,27 +508,8 @@ void spi_init()
     uint16_t *flop = lines[1];
     uint16_t *tmp;
     int line_length = 19;
-    /*
-        for (int k = 0; k < 91; k++){    
-	  for (int y = 0; y < 15; y++){
-	    send_lines(spi_handle, 0 , (16*y), line_length*16, (16*y)+16, flop);
-	    for (int x = 0; x< line_length; x++) {
-	      
-	      //blit_rect(flip, (16*x)+140,(16*y),(16*x)+15+140,(16*y)+16);
-	      int glyph = (k+y)%91 + 0x20; 
-	      uint16_t *char_loc = ((uint16_t *) gfx_high) + (glyph * FONT_SIZE*FONT_SIZE)-FONT_SIZE;
-	      for (int j = 0; j < 16; j++)
-	    memcpy(flop + (j+j*((line_length)*16) + (x*16)),  char_loc+(j*16), sizeof(uint16_t) * FONT_SIZE);
-	}
-	send_line_finish(spi_handle);
-	tmp = flip;
-	flip = flop;
-	flop = flip;
-      }
-      }*/
-    //	send_line_finish(spi_handle);
     printf("Sending text\n");
-    put_text_at(spi_handle,1,1,"Hello World",11);
+    put_text_at(spi_handle,1,1,"This is a long line of text that should take up several rows no problem but who knows",80);
     //Go do nice stuff.
     //display_pretty_colors(spi);
 }

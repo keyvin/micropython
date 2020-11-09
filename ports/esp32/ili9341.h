@@ -22,6 +22,7 @@ uint16_t *lines[2];
 enum GFX_MODE {FULL_TEXT, PARTIAL_TEXT, BLIT_RECT, BLIT_LINES, BUFFERED};
 
 uint8_t text_console_line_length;
+uint8_t text_console_max_lines;
 uint8_t text_console_row;
 uint8_t text_console_column;
 

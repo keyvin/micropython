@@ -8,11 +8,12 @@
 static void *gfx_high = (void *)0x3f800000 + (3*1024*1024);
 //frees buffers (if allocated), clear screen, initialize cursor position
 //generate font at high GFX memory. It starts at memory reigon
-void spi_init();
+void ili9341_spi_init();
 void start_text_mode();
 void blit_rect(uint16_t *, int, int, int, int);
 void set_rect(uint16_t, uint16_t);
 void get_char(uint16_t *, int);
+void put_text_at(unsigned int, unsigned int, const char *, unsigned int);
 static void send_line_finish(spi_device_handle_t);
 spi_device_handle_t spi_handle;
 uint8_t ili9xx_inited;

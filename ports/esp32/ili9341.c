@@ -1,4 +1,3 @@
-
 /* SPI Master example
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
@@ -16,32 +15,6 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "ili9341.h"
-
-//#include "pretty_effect.h"
-
-/*
- This code displays some fancy graphics on the 320x240 LCD on an ESP-WROVER_KIT board.
- This example demonstrates the use of both spi_device_transmit as well as
- spi_device_queue_trans/spi_device_get_trans_result and pre-transmit callbacks.
-
- Some info about the ILI9341/ST7789V: It has an C/D line, which is connected to a GPIO here. It expects this
- line to be low for a command and high for data. We use a pre-transmit callback here to control that
- line: every transaction has as the user-definable argument the needed state of the D/C line and just
- before the transaction is sent, the callback will set this line to the correct state.
-*/
-
-
-//To speed up transfers, every SPI transfer sends a bunch of lines. This define specifies how many. More means more memory use,
-//but less overhead for setting up / finishing transfers. Make sure 240 is dividable by this.
-
-
-/* Send a command to the LCD. Uses spi_device_polling_transmit, which waits
- * until the transfer is complete.
- *
- * Since command transactions are usually small, they are handled in polling
- * mode for higher speed. The overhead of interrupt transactions is more than
- * just waiting for the transaction to complete.
- */
 
 
 void start_text_mode() {
@@ -67,30 +40,20 @@ void start_text_mode() {
 void get_char(uint16_t *buffer, int ord) {
   int x,y;
   int set;
-  int mask;
-    
+  int mask;    
   char *bitmap = font8x8_basic[ord];    
-
   for (x=0; x < 8; x++) {
     for (y=0; y < 8; y++) {
       set = bitmap[x] & (1 << y);
-
-
       buffer[((x*2)*16)+(y*2)] = set ? 0xFFFF: 0x0000;
       buffer[((x*2)*16)+((y*2)+1)] = set ? 0xFFFF: 0x0000;
       buffer[(((x*2)+1)*16)+(y*2)] = set ? 0xFFFF: 0x0000;
-      buffer[(((x*2)+1)*16)+(y*2)+1] = set ? 0xFFFF: 0x0000;
-      
-      
-      
-      //printf("%c", set ? 'X' : ' ');
+      buffer[(((x*2)+1)*16)+(y*2)+1] = set ? 0xFFFF: 0x0000;         
     }
-    //    printf("\n");
   }
-
 }
 
-void fill_line(uint16_t *buffer, char *text, uint8_t length){
+void fill_line(uint16_t *buffer, const char *text, uint8_t length){
   //at most line_length characters
   uint16_t position = 0;
   int ili_window_size; //Number of pixels that constitute a row (ili9341 window pointers)
@@ -98,14 +61,12 @@ void fill_line(uint16_t *buffer, char *text, uint8_t length){
   //partial_window
   if (length < text_console_line_length){
     ili_window_size = length*FONT_SIZE;
-    printf("Shorter Size\n");
+
   }
   //full window size (320px)
   else {
     ili_window_size=320; //320/16 =20 (0..19)
-    printf("Greatest Size\n");
   }
-  printf("ili_window_size:%d\nili_font_size:%d", ili_window_size, FONT_SIZE);
   while (position < length){     
     uint16_t *char_loc = ((uint16_t *) gfx_high) + (text[position] * FONT_SIZE*FONT_SIZE)-FONT_SIZE;
     uint16_t col = position*FONT_SIZE;    
@@ -115,12 +76,6 @@ void fill_line(uint16_t *buffer, char *text, uint8_t length){
     }    
     position++;
   }
-  
-}
-
-
-void send_text_line(int x, int y, uint16_t *buffer) {
-  
   
 }
 
@@ -296,9 +251,8 @@ void blit_rect(uint16_t *data, int sx, int sy, int ex, int ey) {
 
   }
    
-  
-
 }
+
 
 static void send_line_finish(spi_device_handle_t spi)
 {
@@ -356,8 +310,6 @@ static void display_pretty_colors(spi_device_handle_t spi)
 	    sy=y*50;
 	    ey=sy+50;
 	    if(ey > 240){ey=50;sy=0;}
-
-	    
 	    send_lines(spi, sx,sy,ex,ey, lines[sending_line]);
 	    //if (frame%30==0)
 	    for (int yy=0; yy<3; yy++){
@@ -368,30 +320,21 @@ static void display_pretty_colors(spi_device_handle_t spi)
 	       
 		}
 	    }
-	    //calc new co-ords
-	    }
-            //The line set is queued up for sending now; the actual sending happens in the
-            //background. We can go on to calculate the next line set as long as we do not
-            //touch line[sending_line]; the SPI sending process is still reading from that.	    
-	      
+	    
+	  }
         }
-	//vTaskDelay(100 / portTICK_RATE_MS);
-	
 	if (frame%5000==0){printf("Frame %d\n", frame);
-	 
 	  printf("ticks elapsed:%lld,\n", xTaskGetTickCount()-time);
 	  time = xTaskGetTickCount();
 	  sending_line=calc_line;
             calc_line=(calc_line==1)?0:1;
- 	    //	    sending_line=calc_line;
-	    //            calc_line=(calc_line==1)?0:1;
-	    
 	  }
-			 			  
     }
 }
 
-void put_text_at(spi_device_handle_t spi_handle ,uint8_t row, uint8_t col, char *text, uint8_t len)
+
+
+void put_text_at(unsigned int row, unsigned int  col, const char *text, unsigned int len)
 {
   uint8_t multi_line = 0;
   uint8_t last_line_len =0; 
@@ -413,8 +356,7 @@ void put_text_at(spi_device_handle_t spi_handle ,uint8_t row, uint8_t col, char 
   
   if (!multi_line){
     fill_line(lines[0], text, len);
-    // void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_t ex, uint16_t ey, uint16_t *linedata)
-    //    printf("
+
     send_lines(spi_handle, col*FONT_SIZE, row*FONT_SIZE, (col+len)*FONT_SIZE,row*FONT_SIZE+FONT_SIZE, lines[0]);
     send_line_finish(spi_handle);
     return;
@@ -427,7 +369,7 @@ void put_text_at(spi_device_handle_t spi_handle ,uint8_t row, uint8_t col, char 
     current_line = 1;
     row++;
     text = text + first_line;
-    printf("first line:%d\nlast line%d\nnum_lines:%d\nline_length:%d\n", first_line, last_line_len, num_full_lines,text_console_line_length);
+
     //start full line fills.
     while (current_line <= num_full_lines){      
       fill_line(lines[current_line%2], text, text_console_line_length);
@@ -442,26 +384,12 @@ void put_text_at(spi_device_handle_t spi_handle ,uint8_t row, uint8_t col, char 
       fill_line(lines[current_line%2], text, last_line_len);
       send_lines(spi_handle,0,row*FONT_SIZE, last_line_len*FONT_SIZE, (row*FONT_SIZE)+FONT_SIZE, lines[current_line%2]);
       send_line_finish(spi_handle);
-    }
-		 
+    }		 
   }
-  //  send_lines(spi_handle, 0 , (16*y), line_length*16, (16*y)+16, flop);
-  /*    for (int x = 0; x< line_length; x++) {
-    
-    //blit_rect(flip, (16*x)+140,(16*y),(16*x)+15+140,(16*y)+16);
-    int glyph = (k+y)%91 + 0x20; 
-    uint16_t *char_loc = ((uint16_t *) gfx_high) + (glyph * FONT_SIZE*FONT_SIZE)-FONT_SIZE;
-  }
-  send_line_finish(spi_handle);
-  tmp = flip;
-  flip = flop;
-  flop = flip;
-  */
-  
 }
 
 
-void spi_init()
+void ili9341_spi_init()
 {
     esp_err_t ret;
     spi_bus_config_t buscfg={
@@ -492,24 +420,6 @@ void spi_init()
     ESP_ERROR_CHECK(ret);
     //Initialize the LCD
     lcd_init(spi_handle);
-
-
-    //Initialize the effect displayed
-//    ret=pretty_effect_init();
     ESP_ERROR_CHECK(ret);
-//Allocate memory for the pixel buffers
-    //for (int i=0; i<2; i++) {
-    //    lines[i]=heap_caps_malloc(MAX_RECT*sizeof(uint16_t), MALLOC_CAP_DMA);
-    //    assert(lines[i]!=NULL);
-    //}
     start_text_mode();
-    //get_char(lines[0], 0x20);
-    uint16_t *flip = lines[0];
-    uint16_t *flop = lines[1];
-    uint16_t *tmp;
-    int line_length = 19;
-    printf("Sending text\n");
-    put_text_at(spi_handle,1,1,"This is a long line of text that should take up several rows no problem but who knows",80);
-    //Go do nice stuff.
-    //display_pretty_colors(spi);
 }

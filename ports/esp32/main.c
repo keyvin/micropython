@@ -176,7 +176,7 @@ void app_main(void) {
         nvs_flash_init();
     }
     //  should set this up for a background driver. Just call init for now
-        spi_init();
+        ili9341_spi_init();
 	//    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0);
     //background composite
     //init_screen();

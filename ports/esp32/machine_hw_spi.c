@@ -36,7 +36,7 @@
 
 #include "driver/spi_master.h"
 
-#define MP_HW_SPI_MAX_XFER_BYTES (4092)
+#define MP_HW_SPI_MAX_XFER_BYTES (16*2*320)
 #define MP_HW_SPI_MAX_XFER_BITS (MP_HW_SPI_MAX_XFER_BYTES * 8) // Has to be an even multiple of 8
 
 typedef struct _machine_hw_spi_obj_t {

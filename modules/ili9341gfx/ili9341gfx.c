@@ -11,16 +11,18 @@
 #include "ili9341.h"
 #include <string.h>
 #include <stdio.h>
-
+#include <stdlib.h>
 
 
 STATIC mp_obj_t py_put_text_at(mp_obj_t row, mp_obj_t col, mp_obj_t txt){
   int r = mp_obj_get_int(row);
-  int c = mp_obj_get_int(col);
-  
+  int c = mp_obj_get_int(col);  
   const char *s_ptr = mp_obj_str_get_str(txt);
   int length = strlen(s_ptr);
-  put_text_at(r, c, s_ptr, length);
+  char *stringy = (char *) malloc(sizeof(char) * length);
+  strncpy(stringy, s_ptr, length);
+  put_text_at(r, c, stringy, length);
+  free(stringy);
   return mp_const_none;
 }
 

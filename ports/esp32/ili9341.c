@@ -30,8 +30,7 @@ void start_text_mode() {
   //generate fonts at gfx_high_mem
   for (uint8_t glyph = 0; glyph < 0x7F; glyph++)
     get_char( ((uint16_t *)gfx_high) + (FONT_SIZE*FONT_SIZE)*glyph, glyph);
-  text_console_row = 0;
-  text_console_column = 0;
+
   text_console_line_length = 20;
   gfx_mode = FULL_TEXT;
 }
@@ -73,6 +72,8 @@ void fill_line(uint16_t *buffer, const char *text, uint8_t length){
     for (int j = 0; j < FONT_SIZE; j++){ //0..15
       uint16_t row = j*ili_window_size;
       memcpy(buffer + row + col, char_loc+(j*FONT_SIZE),sizeof(uint16_t)*FONT_SIZE);
+      if ((row+col) > 16*320*2)printf("Buffer overrun\n");
+
     }    
     position++;
   }
@@ -369,7 +370,7 @@ void put_text_at(unsigned int row, unsigned int  col, const char *text, unsigned
     current_line = 1;
     row++;
     text = text + first_line;
-
+    //    printf("current_line: %d\n, num_full_lines: %d\n, last_line_len:%d\n", current_line, num_full_lines, last_line_len);
     //start full line fills.
     while (current_line <= num_full_lines){      
       fill_line(lines[current_line%2], text, text_console_line_length);
@@ -380,11 +381,12 @@ void put_text_at(unsigned int row, unsigned int  col, const char *text, unsigned
       text = text + text_console_line_length;
     }
     if (last_line_len){
-      send_line_finish(spi_handle);
       fill_line(lines[current_line%2], text, last_line_len);
-      send_lines(spi_handle,0,row*FONT_SIZE, last_line_len*FONT_SIZE, (row*FONT_SIZE)+FONT_SIZE, lines[current_line%2]);
       send_line_finish(spi_handle);
-    }		 
+      send_lines(spi_handle,0,row*FONT_SIZE, last_line_len*FONT_SIZE, (row*FONT_SIZE)+FONT_SIZE, lines[current_line%2]);
+    }
+    send_line_finish(spi_handle);
+    //    printf("finished with function\n");
   }
 }
 

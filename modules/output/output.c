@@ -8,6 +8,7 @@
 #include "mphalport.h"
 #include "modmachine.h"
 #include "modesp32.h"
+#include "mphalport.h"
 #include <stdio.h>
 
 
@@ -19,9 +20,9 @@ STATIC mp_obj_t set_print(mp_obj_t fun)
 
   if (fun == mp_const_none)
     was_set = 0;
-    MP_STATE_PORT(output_func) = fun;
-    was_set = 1;
-    return mp_const_none;
+  MP_STATE_PORT(output_func) = fun;
+  was_set = 1;
+  return mp_const_none;
   //output_func = NULL;
 }
 
@@ -32,7 +33,6 @@ void output_call_callback(const char *string, uint32_t len)
   if ( was_set == 1){
     if (strlen(string) == 0)
       return;
-
     
     //    #printf("str - %s\n", string);
     mp_obj_t obj = mp_obj_new_str(string,len);
@@ -45,6 +45,8 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(set_print_obj, set_print);
 
 //This function disables serial output. 
 STATIC mp_obj_t disable_uart_output(mp_obj_t disable_uart_output) {
+
+
   mp_obj_t ret = mp_const_none;
   return ret;
 

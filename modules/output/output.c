@@ -35,7 +35,7 @@ void output_call_callback(const char *string, uint32_t len)
       return;
     
     //    #printf("str - %s\n", string);
-    mp_obj_t obj = mp_obj_new_str(string,len);
+    mp_obj_t obj = mp_obj_new_bytes((const byte *)string,len);
     mp_call_function_1(MP_STATE_PORT(output_func), obj);
   }
 }

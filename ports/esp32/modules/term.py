@@ -23,10 +23,7 @@ class term:
         self.x = 0
         
     def write(self, text):
-        try:
-            text = bytes(text,'utf-8')
-        except:
-            print("Error decoding/encoding")
+        # print("Error decoding/encoding")
         for char in text:
             if char == 0x0A:
                 self.y = self.y + 1
@@ -36,15 +33,15 @@ class term:
             elif char == 0x0D:
                 self.x = 0
             elif char == 0x08:
-                self.data[self.x + (self.y*self.columns)] = ' '
+                #self.data[self.x + (self.y*self.columns)] = 0x20
                 self.x = self.x -1
                 if self.x < 0:
-                    self.y = self.y - 1
-                    self.x = self.columns-1
-                    if self.y < 0:
-                        self.y =0
-                        self.x = 0
-            else:
+                    #self.y = self.y - 1
+                    #self.x = self.columns-1
+                    #if self.y < 0:
+                    #    self.y =0
+                    self.x = 0
+            elif char >=0x20 and char <=0x7E:
                 self.data[self.x + (self.y*self.columns)] = char
                 self.x = self.x+1
                 if self.x == self.columns:
@@ -52,7 +49,8 @@ class term:
                     self.y = self.y+1
                     if self.y == self.rows:
                         self.scroll()
-        
+            else:
+                pass
             
                 
     

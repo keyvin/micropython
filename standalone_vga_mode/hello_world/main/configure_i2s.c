@@ -5,6 +5,9 @@ typedef int bool;
 //typedef int gpio_mode_t; 
 //typedef int gpio_num_t;
 
+
+#define FABGLIB_USE_APLL_AB_COEF 0
+
 #define FABGLIB_XTAL 40000000
 #define GPIO_UNUSED GPIO_NUM_MAX
 
@@ -27,7 +30,7 @@ int tmax(int a, int b){
 }
 
 int tmin(int a, int b) {
-  return (a > b) ? b : a;
+  return !(b < a) ? a : b;
 }
 
 
@@ -83,7 +86,7 @@ void stop();
 
 
 void setupClock(int freq);
-static void setupGPIO(gpio_num_t gpio, int bit, gpio_mode_t mode);
+
 
   
   
@@ -105,12 +108,6 @@ typedef struct APLLPARams {
 } APLLParams;
 
 
-
-void configureGPIO(gpio_num_t gpio, gpio_mode_t mode)
-{
-  PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
-  gpio_set_direction(gpio, mode);
-}
 
 
 
@@ -145,23 +142,6 @@ void end_i2s()
 
 
 
-// if bit is -1 = clock signal
-// gpio = GPIO_UNUSED means not set
-void setupGPIO_i2s(gpio_num_t gpio, int bit, gpio_mode_t mode)
-{
-  if (gpio != GPIO_UNUSED) {
-
-    if (bit == -1) {
-      // I2S1 clock out to CLK_OUT1 (fixed to GPIO0)
-      WRITE_PERI_REG(PIN_CTRL, 0xF);
-      PIN_FUNC_SELECT(GPIO_PIN_REG_0, FUNC_GPIO0_CLK_OUT1);
-    } else {
-      configureGPIO(gpio, mode);
-      gpio_matrix_out(gpio, I2S1O_DATA_OUT0_IDX + bit, false, false);
-    }
-    
-  }
-}
 
 
 void play_i2s(int freq, lldesc_t volatile * dmaBuffers)
@@ -474,12 +454,12 @@ void setupClock(int freq)
   double error, out_freq;
   uint8_t a = 1, b = 0;
   APLLCalcParams(freq, &p, &a, &b, &out_freq, &error);
-
+  printf("clock freq: %d, %d, %d, %d, %f, %f\n",p.sdm0, p.sdm1, p.sdm2, p.o_div, out_freq, error);
   I2S1.clkm_conf.val          = 0;
   I2S1.clkm_conf.clkm_div_b   = b;
   I2S1.clkm_conf.clkm_div_a   = a;
   I2S1.clkm_conf.clkm_div_num = 2;  // not less than 2
-  
+  printf("I2s clocks: %d, %d\n", a,b);
   I2S1.sample_rate_conf.tx_bck_div_num = 1; // this makes I2S1O_BCK = I2S1_CLK
 
   rtc_clk_apll_enable(true, p.sdm0, p.sdm1, p.sdm2, p.o_div);

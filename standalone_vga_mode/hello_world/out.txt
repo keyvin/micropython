@@ -1,0 +1,135 @@
+In file included from /home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:4:
+/home/keyvin/esp-idf/components/esp32/include/rom/lldesc.h:1:2: warning: #warning rom/lldesc.h is deprecated, please use esp32/rom/lldesc.h instead [-Wcpp]
+ #warning rom/lldesc.h is deprecated, please use esp32/rom/lldesc.h instead
+  ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c: In function 'setResolution':
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:199:5: error: implicit declaration of function 'stop_i2s' [-Werror=implicit-function-declaration]
+     stop_i2s();
+     ^~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:293:34: error: expected expression before 'RGB222'
+    uint8_t fg_pat = preparePixel(RGB222((Color)fg));
+                                  ^~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:294:41: error: expected expression before 'RGB222'
+           uint8_t bg_pat = preparePixel(RGB222((Color)bg));
+                                         ^~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:304:13: error: expected expression before ':' token
+   CoreUsage::setBusiestCore(FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+             ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:305:3: error: implicit declaration of function 'esp_intr_alloc_pinnedToCore'; did you mean 'esp_intr_alloc_intrstatus'? [-Werror=implicit-function-declaration]
+   esp_intr_alloc_pinnedToCore(ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, this, &m_isr_handle, FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+   esp_intr_alloc_intrstatus
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:305:110: error: 'this' undeclared (first use in this function)
+   esp_intr_alloc_pinnedToCore(ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, this, &m_isr_handle, FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+                                                                                                              ^~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:305:110: note: each undeclared identifier is reported only once for each function it appears in
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:305:131: error: 'FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE' undeclared (first use in this function)
+   esp_intr_alloc_pinnedToCore(ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, this, &m_isr_handle, FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+                                                                                                                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:307:3: error: implicit declaration of function 'play_i2s' [-Werror=implicit-function-declaration]
+   play_i2s(m_timings.frequency, m_DMABuffers);
+   ^~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:304:3: error: label 'CoreUsage' defined but not used [-Werror=unused-label]
+   CoreUsage::setBusiestCore(FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+   ^~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c: In function 'I2SInterrupt':
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:370:30: error: 'ctrl' undeclared (first use in this function); did you mean 'atol'?
+   if (I2S1.int_st.out_eof && ctrl->m_charData != nullptr) {
+                              ^~~~
+                              atol
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:372:10: error: type defaults to 'int' in declaration of 'desc' [-Werror=implicit-int]
+     auto desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
+          ^~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:372:17: warning: initialization of 'int' from 'volatile lldesc_t *' {aka 'volatile struct lldesc_s *'} makes integer from pointer without a cast [-Wint-conversion]
+     auto desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
+                 ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:374:14: warning: comparison between pointer and integer
+     if (desc == s_frameResetDesc) {
+              ^~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:407:10: error: type defaults to 'int' in declaration of 'lines' [-Werror=implicit-int]
+     auto lines = m_lines;
+          ^~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:407:18: warning: initialization of 'int' from 'uint32_t *' {aka 'unsigned int *'} makes integer from pointer without a cast [-Wint-conversion]
+     auto lines = m_lines;
+                  ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:413:18: error: type defaults to 'int' in declaration of 'cursorVisible' [-Werror=implicit-int]
+       const auto cursorVisible = (m_cursorEnabled &&m_cursorCounter >= 0 && s_textRow == m_cursorRow);
+                  ^~~~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:416:73: error: expected ';' before ')' token
+         cursorFGBG = (m_cursorForeground << 4) | m_cursorBackground << 8);
+                                                                         ^
+                                                                         ;
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:416:73: error: expected statement before ')' token
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:419:18: error: type defaults to 'int' in declaration of 'charData' [-Werror=implicit-int]
+       const auto charData = m_charData + (s_upperRow ? 0 : VGATextController_CHARHEIGHT / 2);
+                  ^~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:419:29: warning: initialization of 'int' from 'uint8_t *' {aka 'unsigned char *'} makes integer from pointer without a cast [-Wint-conversion]
+       const auto charData = m_charData + (s_upperRow ? 0 : VGATextController_CHARHEIGHT / 2);
+                             ^~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:420:12: error: type defaults to 'int' in declaration of 'mapItemPtr' [-Werror=implicit-int]
+       auto mapItemPtr = m_map + s_textRow * VGATextController_COLUMNS;
+            ^~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:420:25: warning: initialization of 'int' from 'const uint32_t *' {aka 'const unsigned int *'} makes integer from pointer without a cast [-Wint-conversion]
+       auto mapItemPtr = m_map + s_textRow * VGATextController_COLUMNS;
+                         ^~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:424:20: error: type defaults to 'int' in declaration of 'mapItem' [-Werror=implicit-int]
+         const auto mapItem = *mapItemPtr;
+                    ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:424:30: error: invalid type argument of unary '*' (have 'int')
+         const auto mapItem = *mapItemPtr;
+                              ^~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:428:20: error: type defaults to 'int' in declaration of 'options' [-Werror=implicit-int]
+         const auto options = glyphMapItem_getOptions(mapItem);
+                    ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:428:30: error: implicit declaration of function 'glyphMapItem_getOptions' [-Werror=implicit-function-declaration]
+         const auto options = glyphMapItem_getOptions(mapItem);
+                              ^~~~~~~~~~~~~~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:431:20: error: request for member 'invert' in something not a structure or union
+         if (options.invert)
+                    ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:438:27: warning: initialization of 'uint32_t *' {aka 'unsigned int *'} from 'unsigned int' makes pointer from integer without a cast [-Wint-conversion]
+         uint32_t * dest = lines + lineIndex * VGATextController_WIDTH / sizeof(uint32_t) + col * VGATextController_CHARWIDTHBYTES * 2;
+                           ^~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:441:20: error: request for member 'blank' in something not a structure or union
+         if (options.blank) {
+                    ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:452:65: error: request for member 'underline' in something not a structure or union
+           const bool underline = (s_upperRow == false && options.underline);
+                                                                 ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:453:41: error: request for member 'bold' in something not a structure or union
+           const bool bold      = options.bold;
+                                         ^
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:455:16: error: type defaults to 'int' in declaration of 'charRowPtr' [-Werror=implicit-int]
+           auto charRowPtr = charData + glyphMapItem_getIndex(mapItem) * VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES;
+                ^~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:455:40: error: implicit declaration of function 'glyphMapItem_getIndex' [-Werror=implicit-function-declaration]
+           auto charRowPtr = charData + glyphMapItem_getIndex(mapItem) * VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES;
+                                        ^~~~~~~~~~~~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:458:18: error: type defaults to 'int' in declaration of 'charRowData' [-Werror=implicit-int]
+             auto charRowData = *charRowPtr;
+                  ^~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:458:32: error: invalid type argument of unary '*' (have 'int')
+             auto charRowData = *charRowPtr;
+                                ^~~~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:428:20: warning: variable 'options' set but not used [-Wunused-but-set-variable]
+         const auto options = glyphMapItem_getOptions(mapItem);
+                    ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:492:14: error: type defaults to 'int' in declaration of 'dest' [-Werror=implicit-int]
+         auto dest = lines + ((scanLine + i) % VGATextController_CHARHEIGHT) * VGATextController_WIDTH / sizeof(uint32_t);
+              ^~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:494:11: error: invalid type argument of unary '*' (have 'int')
+           *dest++ = s_blankPatternDWord;
+           ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:495:11: error: invalid type argument of unary '*' (have 'int')
+           *dest++ = s_blankPatternDWord;
+           ^~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c: At top level:
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:537:1: error: unknown type name 'namespace'
+ namespace fabgl {
+ ^~~~~~~~~
+/home/keyvin/micropython/standalone_vga_mode/hello_world/main/vga-espsdk.c:537:17: error: expected '=', ',', ';', 'asm' or '__attribute__' before '{' token
+ namespace fabgl {
+                 ^
+cc1: some warnings being treated as errors
+make[1]: *** [/home/keyvin/esp-idf/make/component_wrapper.mk:292: vga-espsdk.o] Error 1
+make: *** [/home/keyvin/esp-idf/make/project.mk:590: component-main-build] Error 2

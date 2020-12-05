@@ -25,8 +25,8 @@ typedef int bool;
 #include <stdint.h>
 #include <stddef.h>
 
-#include "rom/lldesc.h"
-
+//#include "rom/lldesc.h"
+#include "esp32/rom/lldesc.h"
 
 
 bool                m_DMAStarted;
@@ -106,7 +106,7 @@ void setupClock(int freq);
 #include "soc/i2s_struct.h"
 #include "soc/i2s_reg.h"
 #include "driver/periph_ctrl.h"
-#include "rom/lldesc.h"
+
 #include "soc/rtc.h"
 typedef struct APLLPARams {
   uint8_t sdm0;

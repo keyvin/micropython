@@ -256,7 +256,7 @@ endif
 # these flags are common to C and C++ compilation
 CFLAGS_COMMON = -Os -ffunction-sections -fdata-sections -fstrict-volatile-bitfields \
 	-mlongcalls -nostdlib \
-	-Wall -Werror -Wno-error=unused-function -Wno-error=unused-but-set-variable \
+	-Wall -Wno-error=unused-function -Wno-error=unused-but-set-variable \
 	-Wno-error=unused-variable -Wno-error=deprecated-declarations \
 	-DESP_PLATFORM
 
@@ -355,6 +355,8 @@ SRC_C = \
 	machine_rtc.c \
 	machine_sdcard.c \
 	ili9341.c \
+	configure_i2s.c \
+	vga-espsdk.c \
 	$(wildcard $(BOARD_DIR)/*.c) \
 	$(SRC_MOD)
 

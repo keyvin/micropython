@@ -1,27 +1,70 @@
-#include <stdint.h>
-#include <stddef.h>
+//This code is entirely derived from FABGL
+//http://www.fabglib.org/
+//Full Credit to Fabrizio Di Vittorio
+//I never would have attempted to understand something like
+//this without
+//such high quality and re-usable code.
+//Assume that all code in this module is licensed GPLv3
 
-#include "rom/lldesc.h"
+
+//requires latest SDK for proper operation. 
+
+
+#include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
-
-#include "fabglconf.h"
-#include "fabutils.h"
-#include "devdrivers/swgenerator.h"
-#include "dispdrivers/vgacontroller.h"
-#include "fonts/font_8x14.h"
-
+//#include "rom/lldesc.h"
+#include "esp32/rom/lldesc.h"
+#include "esp_heap_caps.h"
+#include "driver/i2s.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "soc/i2s_struct.h"
 #include "soc/i2s_reg.h"
 #include "driver/periph_ctrl.h"
-#include "rom/lldesc.h"
-#include "soc/rtc.h"
+#define BACKCORE 0
 
-#include "fabutils.h"
-#include "vgatextcontroller.h"
-#include "devdrivers/swgenerator.h"
+#include "configure_i2s.h"
+
+//#include <stdint.h>
+
+#include "freertos/queue.h"
+#define nullptr  NULL
 
 
+uint32_t counter;
 
+typedef uint8_t Color;
+
+typedef struct  ESP_intr_alloc_args {
+  int             source;
+  int             flags;
+  intr_handler_t  handler;
+  void *          arg;
+  intr_handle_t * ret_handle;
+  TaskHandle_t    waitingTask;
+} esp_intr_alloc_args;
+
+typedef struct RGBT {
+  uint8_t R: 2;
+  uint8_t G: 2;
+  uint8_t B: 2;
+} RGB222;
+    
+void configureGPIO(gpio_num_t gpio, gpio_mode_t mode)
+{
+  PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
+  gpio_set_direction(gpio, mode);
+}
+
+void esp_intr_alloc_pinnedToCore_task(void * arg)
+{
+  esp_intr_alloc_args *args = (esp_intr_alloc_args*) arg;
+  esp_intr_alloc(args->source, args->flags, args->handler, args->arg, args->ret_handle);
+  //  xTaskNotifyGive(args->waitingTask);
+  vTaskDelete(NULL);
+}
+
+//defines for vga text mode
 #define VGATextController_CHARWIDTH      8    // max 8
 #define VGATextController_CHARWIDTHBYTES ((VGATextController_CHARWIDTH + 7) / 8)
 #define VGATextController_CHARHEIGHT     14
@@ -29,8 +72,7 @@
 #define VGATextController_ROWS           34
 #define VGATextController_WIDTH          640
 #define VGATextController_HEIGHT         480
-
-#define VGATextController_MODELINE       VGA_640x480_60Hz
+#define VGATextController_MODELINE "\"640x480@60Hz\" 25.175 640 656 752 800 480 490 492 525 -HSync -VSync"
 
 
 
@@ -43,27 +85,16 @@
 #define VGA_SYNC_MASK ((1 << VGA_HSYNC_BIT) | (1 << VGA_VSYNC_BIT))
 
 
-// pixel 0 = byte 2, pixel 1 = byte 3, pixel 2 = byte 0, pixel 3 = byte 1 :
-// pixel : 0  1  2  3  4  5  6  7  8  9 10 11 ...etc...
-// byte  : 2  3  0  1  6  7  4  5 10 11  8  9 ...etc...
-// dword : 0           1           2          ...etc...
-// Thanks to https://github.com/paulscottrobson for the new macro. Before was: (row[((X) & 0xFFFC) + ((2 + (X)) & 3)])
-#define VGA_PIXELINROW(row, X) (row[(X) ^ 2])
 
-// requires variables: m_viewPort
-#define VGA_PIXEL(X, Y)    VGA_PIXELINROW(m_viewPort[(Y)], X)
-#define VGA_INVERT_PIXEL(X, Y) { auto px = &VGA_PIXEL((X), (Y)); *px = ~(*px ^ VGA_SYNC_MASK); }
-
-enum VGAScanStart {
+typedef enum VGASCanStart {
   FrontPorch,   /**< Horizontal line sequence is: FRONTPORCH -> SYNC -> BACKPORCH -> VISIBLEAREA */
   Sync,         /**< Horizontal line sequence is: SYNC -> BACKPORCH -> VISIBLEAREA -> FRONTPORCH */
   BackPorch,    /**< Horizontal line sequence is: BACKPORCH -> VISIBLEAREA -> FRONTPORCH -> SYNC */
   VisibleArea   /**< Horizontal line sequence is: VISIBLEAREA -> FRONTPORCH -> SYNC -> BACKPORCH */
-};
+} VGAScanStart;
 
 
-/** @brief Specifies the VGA timings. This is a modeline decoded. */
-struct VGATimings {
+typedef struct VGATImings {
   char          label[22];       /**< Resolution text description */
   int           frequency;       /**< Pixel frequency (in Hz) */
   int16_t       HVisibleArea;    /**< Horizontal visible area length in pixels */
@@ -79,153 +110,18 @@ struct VGATimings {
   uint8_t       scanCount;       /**< Scan count. 1 = single scan, 2 = double scan (allowing low resolutions like 320x240...) */
   uint8_t       multiScanBlack;  /**< 0 = Additional rows are the repetition of the first. 1 = Additional rows are blank. */
   VGAScanStart  HStartingBlock;  /**< Horizontal starting block. DetermineshHorizontal order of signals */
-};
-   
-
-
-//#define VGATextController_PERFORMANCE_CHECK
-
-
-
-
-/**
-* @brief Represents the VGA text-only controller
-*
-* The text only VGA controller allows only text, but requires less than 50K of RAM.
-* Resolution is fixed at 640x480, with 80 columns by 34 rows, 16 colors.
-*
-* Text only output is very CPU intensive process and consumes up to 30% of one CPU core. Anyway this allows to have
-* more than 290K free for your application.
-*
-* Graphics (Canvas) aren't possible. Also, some character styles aren't also possible (double size, 132 columns, italic).
-*
-*
-* This example initializes VGA Text Controller with 64 colors (16 usable):
-*
-*     fabgl::VGATextController VGAController;
-*     // the default assigns GPIO22 and GPIO21 to Red, GPIO19 and GPIO18 to Green, GPIO5 and GPIO4 to Blue, GPIO23 to HSync and GPIO15 to VSync
-*     VGAController.begin();
-*     VGAController.setResolution();
-*/
-
-
-
-
-  VGATextController();
-
-
-  /**
-   * @brief This is the 8 colors (5 GPIOs) initializer.
-   *
-   * One GPIO per channel, plus horizontal and vertical sync signals.
-   *
-   * @param redGPIO GPIO to use for red channel.
-   * @param greenGPIO GPIO to use for green channel.
-   * @param blueGPIO GPIO to use for blue channel.
-   * @param HSyncGPIO GPIO to use for horizontal sync signal.
-   * @param VSyncGPIO GPIO to use for vertical sync signal.
-   *
-   * Example:
-   *
-   *     // Use GPIO 22 for red, GPIO 21 for green, GPIO 19 for blue, GPIO 18 for HSync and GPIO 5 for VSync
-   *     VGAController.begin(GPIO_NUM_22, GPIO_NUM_21, GPIO_NUM_19, GPIO_NUM_18, GPIO_NUM_5);
-   */
-  void begin(gpio_num_t redGPIO, gpio_num_t greenGPIO, gpio_num_t blueGPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO);
-
-  /**
-   * @brief This is the 64 colors (8 GPIOs) initializer.
-   *
-   * Two GPIOs per channel, plus horizontal and vertical sync signals.
-   *
-   * @param red1GPIO GPIO to use for red channel, MSB bit.
-   * @param red0GPIO GPIO to use for red channel, LSB bit.
-   * @param green1GPIO GPIO to use for green channel, MSB bit.
-   * @param green0GPIO GPIO to use for green channel, LSB bit.
-   * @param blue1GPIO GPIO to use for blue channel, MSB bit.
-   * @param blue0GPIO GPIO to use for blue channel, LSB bit.
-   * @param HSyncGPIO GPIO to use for horizontal sync signal.
-   * @param VSyncGPIO GPIO to use for vertical sync signal.
-   *
-   * Example:
-   *
-   *     // Use GPIO 22-21 for red, GPIO 19-18 for green, GPIO 5-4 for blue, GPIO 23 for HSync and GPIO 15 for VSync
-   *     VGAController.begin(GPIO_NUM_22, GPIO_NUM_21, GPIO_NUM_19, GPIO_NUM_18, GPIO_NUM_5, GPIO_NUM_4, GPIO_NUM_23, GPIO_NUM_15);
-   */
-  void begin(gpio_num_t red1GPIO, gpio_num_t red0GPIO, gpio_num_t green1GPIO, gpio_num_t green0GPIO, gpio_num_t blue1GPIO, gpio_num_t blue0GPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO);
-
-  /**
-   * @brief This is the 64 colors (8 GPIOs) initializer using default pinout.
-   *
-   * Two GPIOs per channel, plus horizontal and vertical sync signals.
-   * Use GPIO 22-21 for red, GPIO 19-18 for green, GPIO 5-4 for blue, GPIO 23 for HSync and GPIO 15 for VSync
-   *
-   * Example:
-   *
-   *     VGAController.begin();
-   */
-  void begin();
-
-  /**
-   * @brief Sets fixed resolution
-   *
-   * This call is required, even you cannot set or change resolution.
-   */
-  void setResolution(char const * modeline = nullptr, int viewPortWidth = -1, int viewPortHeight = -1, bool doubleBuffered = false);
-
-  /**
-   * @brief Sets text map to display
-   *
-   * This is set automatically by the terminal.
-   */
-  void setTextMap(uint32_t const * map, int rows);
-
-  /**
-   * @brief Adjust columns and rows to the controller limits
-   *
-   * @param columns If > 0 then it is set to 80.
-   * @param rows If > 0 then it is limited to 1..34 range.
-   */
-  void adjustMapSize(int * columns, int * rows);
-
-  int getScreenWidth()    { return m_timings.HVisibleArea; }
-  int getScreenHeight()   { return m_timings.VVisibleArea; }
-
-  int getColumns()        { return VGATextController_COLUMNS; }
-  int getRows()           { return VGATextController_ROWS; }
-
-  void enableCursor(bool value)            { m_cursorEnabled = value; }
-  void setCursorPos(int row, int col)      { m_cursorRow = row; m_cursorCol = col; m_cursorCounter = 0; }
-  void setCursorSpeed(int value)           { m_cursorSpeed = value; }
-  void setCursorForeground(Color value);
-  void setCursorBackground(Color value);
-
-
-
-
-  void setResolution(VGATimings const& timings);
-  void init(gpio_num_t VSyncGPIO);
-  void setupGPIO(gpio_num_t gpio, int bit, gpio_mode_t mode);
-  void freeBuffers();
-
-  void fillDMABuffers();
-  uint8_t packHVSync(bool HSync, bool VSync);
-  uint8_t preparePixelWithSync(RGB222 rgb, bool HSync, bool VSync);
-
-  uint8_t IRAM_ATTR preparePixel(RGB222 rgb) { return m_HVSync | (rgb.B << VGA_BLUE_BIT) | (rgb.G << VGA_GREEN_BIT) | (rgb.R << VGA_RED_BIT); }
-
-  static void I2SInterrupt(void * arg);
-
+} VGATimings;
 
   static volatile int        s_scanLine;
   static uint32_t            s_blankPatternDWord;
   static uint32_t *          s_fgbgPattern;
   static int                 s_textRow;
   static bool                s_upperRow;
-  static lldesc_t volatile * s_frameResetDesc;
+  volatile lldesc_t * s_frameResetDesc;
 
   VGATimings             m_timings;
 
-  GPIOStream             m_GPIOStream;
+//GPIOStream             m_GPIOStream;
   int                    m_bitsPerChannel;  // 1 = 8 colors, 2 = 64 colors, set by begin()
   lldesc_t volatile *    m_DMABuffers;
   int                    m_DMABuffersCount;
@@ -240,77 +136,45 @@ struct VGATimings {
   intr_handle_t          m_isr_handle;
 
   // contains H and V signals for visible line
-  volatile uint8_t       m_HVSync;
+  uint8_t       m_HVSync;
 
   uint8_t *              m_charData;
   uint32_t const *       m_map;
 
-  // cursor propsvolatile int        VGATextController::s_scanLine;
-uint32_t            VGATextController::s_blankPatternDWord;
-uint32_t *          VGATextController::s_fgbgPattern = nullptr;
-int                 VGATextController::s_textRow;
-bool                VGATextController::s_upperRow;
-lldesc_t volatile * VGATextController::s_frameResetDesc;
+  // cursor props
+  bool                   m_cursorEnabled;
+  int                    m_cursorCounter; // trip from -m_cursorSpeed to +m_cursorSpeed (>= cursor is visible)
+  int                    m_cursorSpeed;
+  int                    m_cursorRow;
+  int                    m_cursorCol;
+  uint8_t                m_cursorForeground;
+  uint8_t                m_cursorBackground;
+  
 
 
-//start of C file.
 
-//default init
-VGATextController() {
-   m_charData = NULL;
-   m_map = NULL;
-   m_cursorEnabled = 0;
-   m_cursorCounter = 0;
-   m_cursorSpeed = 20;
-   m_cursorRow = 0;
-   m_cursorCol = 0;
-   m_cursorForeground = 0;
-   m_cursorBackground = 15;
-
-}
-
-
-end_VGATextController()
+void setupGPIO(gpio_num_t gpio, int bit, gpio_mode_t mode)
 {
-  free((void*)m_charData);
+  PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
+  configureGPIO(gpio, mode);
+  gpio_matrix_out(gpio, I2S1O_DATA_OUT0_IDX + bit, false, false);
 }
 
 
-void setTextMap(uint32_t const * map, int rows)
-{
-  // wait for the end of frame
-  while (m_map != nullptr && s_scanLine < m_timings.VVisibleArea)
-    ;
-  m_rows = rows;
-  m_map  = map;
-}
-
-
-void adjustMapSize(int * columns, int * rows)
-{
-  if (*columns > 0)
-    *columns = VGATextController_COLUMNS;
-  if (*rows > VGATextController_ROWS)
-    *rows = VGATextController_ROWS;
-
-}
-
-
-void VGATextController::init(gpio_num_t VSyncGPIO)
+void init(gpio_num_t VSyncGPIO)
 {
   m_DMABuffers = nullptr;
-
-  m_GPIOStream.begin();
+  init_i2s_module();
 
   // load font into RAM
-  int charDataSize = 256 * FONT_8x14.height * ((FONT_8x14.width + 7) / 8);
-  m_charData = (uint8_t*) heap_caps_malloc(charDataSize, MALLOC_CAP_8BIT);
-  memcpy(m_charData, FONT_8x14.data, charDataSize);
+  // int charDataSize = 256 * FONT_8x14.height * ((FONT_8x14.width + 7) / 8);
+  //  m_charData = (uint8_t*) heap_caps_malloc(charDataSize, MALLOC_CAP_8BIT);
+  //  memcpy(m_charData, FONT_8x14.data, charDataSize);
 }
 
 
-// initializer for 8 colors configuration
-void VGATextController::begin(gpio_num_t redGPIO, gpio_num_t greenGPIO, gpio_num_t blueGPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO)
+
+void bbegin(gpio_num_t redGPIO, gpio_num_t greenGPIO, gpio_num_t blueGPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO)
 {
   init(VSyncGPIO);
 
@@ -323,67 +187,90 @@ void VGATextController::begin(gpio_num_t redGPIO, gpio_num_t greenGPIO, gpio_num
   setupGPIO(HSyncGPIO, VGA_HSYNC_BIT, GPIO_MODE_OUTPUT);
   setupGPIO(VSyncGPIO, VGA_VSYNC_BIT, GPIO_MODE_INPUT_OUTPUT);  // input/output so can be generated interrupt on falling/rising edge
 
-  RGB222::lowBitOnly = true;
+  //  RGB222::lowBitOnly = true;
   m_bitsPerChannel = 1;
 }
 
-
-// initializer for 64 colors configuration
-void VGATextController::begin(gpio_num_t red1GPIO, gpio_num_t red0GPIO, gpio_num_t green1GPIO, gpio_num_t green0GPIO, gpio_num_t blue1GPIO, gpio_num_t blue0GPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO)
+void rbegin(gpio_num_t red1GPIO, gpio_num_t red0GPIO, gpio_num_t green1GPIO, gpio_num_t green0GPIO, gpio_num_t blue1GPIO, gpio_num_t blue0GPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO)
 {
-  begin(red0GPIO, green0GPIO, blue0GPIO, HSyncGPIO, VSyncGPIO);
+  bbegin(red0GPIO, green0GPIO, blue0GPIO, HSyncGPIO, VSyncGPIO);
 
   // GPIO configuration for bit 1
   setupGPIO(red1GPIO,   VGA_RED_BIT + 1,   GPIO_MODE_OUTPUT);
   setupGPIO(green1GPIO, VGA_GREEN_BIT + 1, GPIO_MODE_OUTPUT);
   setupGPIO(blue1GPIO,  VGA_BLUE_BIT + 1,  GPIO_MODE_OUTPUT);
 
-  RGB222::lowBitOnly = false;
+  //RGB222::lowBitOnly = false;
   m_bitsPerChannel = 2;
 }
 
 
-// initializer for default configuration
-void VGATextController::begin()
+void begin()
 {
-  begin(GPIO_NUM_22, GPIO_NUM_21, GPIO_NUM_19, GPIO_NUM_18, GPIO_NUM_5, GPIO_NUM_4, GPIO_NUM_23, GPIO_NUM_15);
+  rbegin(GPIO_NUM_22, GPIO_NUM_21, GPIO_NUM_19, GPIO_NUM_18, GPIO_NUM_5, GPIO_NUM_4, GPIO_NUM_23, GPIO_NUM_15);
 }
 
 
-void VGATextController::setCursorForeground(Color value)
+
+
+
+// pixel 0 = byte 2, pixel 1 = byte 3, pixel 2 = byte 0, pixel 3 = byte 1 :
+// pixel : 0  1  2  3  4  5  6  7  8  9 10 11 ...etc...
+// byte  : 2  3  0  1  6  7  4  5 10 11  8  9 ...etc...
+// dword : 0           1           2          ...etc...
+// Thanks to https://github.com/paulscottrobson for the new macro. Before was: (row[((X) & 0xFFFC) + ((2 + (X)) & 3)])
+#define VGA_PIXELINROW(row, X) (row[(X) ^ 2])
+
+
+
+
+
+  void setResolution();
+  void init(gpio_num_t VSyncGPIO);
+//  void setupGPIO(gpio_num_t gpio, int bit, gpio_mode_t mode);
+  void freeBuffers();
+
+  void fillDMABuffers();
+  uint8_t packHVSync(bool HSync, bool VSync);
+  uint8_t preparePixelWithSync(RGB222 rgb, bool HSync, bool VSync);
+bool convertModelineToTimings(char const *, VGATimings *);
+
+  uint8_t IRAM_ATTR preparePixel(RGB222 rgb) { return m_HVSync | (rgb.B << VGA_BLUE_BIT) | (rgb.G << VGA_GREEN_BIT) | (rgb.R << VGA_RED_BIT); }
+
+  static void I2SInterrupt(void * arg);
+
+  
+  
+
+ 
+
+void setTextMap(uint32_t const * map, int rows);
+
+  void adjustMapSize(int * columns, int * rows);
+
+  int getScreenWidth()    { return m_timings.HVisibleArea; }
+  int getScreenHeight()   { return m_timings.VVisibleArea; }
+
+  int getColumns()        { return VGATextController_COLUMNS; }
+  int getRows()           { return VGATextController_ROWS; }
+
+  void enableCursor(bool value)            { m_cursorEnabled = value; }
+  void setCursorPos(int row, int col)      { m_cursorRow = row; m_cursorCol = col; m_cursorCounter = 0; }
+  void setCursorSpeed(int value)           { m_cursorSpeed = value; }
+  void setCursorForeground(Color value);
+  void setCursorBackground(Color value);
+//uint8_t preparePixelWithSync(RGB222 rgb) { return m_HVSync | (rgb.B << VGA_BLUE_BIT) | (rgb.G << VGA_GREEN_BIT) | (rgb.R << VGA_RED_BIT); }
+
+//sets 640x480
+void setResolution()
 {
-  m_cursorForeground = (int) value;
-}
-
-
-void VGATextController::setCursorBackground(Color value)
-{
-  m_cursorBackground = (int) value;
-}
-
-
-void VGATextController::setupGPIO(gpio_num_t gpio, int bit, gpio_mode_t mode)
-{
-  configureGPIO(gpio, mode);
-  gpio_matrix_out(gpio, I2S1O_DATA_OUT0_IDX + bit, false, false);
-}
-
-
-void VGATextController::setResolution(char const * modeline, int viewPortWidth, int viewPortHeight, bool doubleBuffered)
-{
+  
+  
   VGATimings timings;
-  if (VGABaseController::convertModelineToTimings(VGATextController_MODELINE, &timings))
-    setResolution(timings);
-}
-
-
-void VGATextController::setResolution(VGATimings const& timings)
-{
-  if (m_DMABuffers) {
-    m_GPIOStream.stop();
-    freeBuffers();
+  if (!convertModelineToTimings(VGATextController_MODELINE, &timings)){
+    printf("Failure converting timings\n");
+     return;
   }
-
   m_timings = timings;
 
   m_HVSync = packHVSync(false, false);
@@ -468,7 +355,7 @@ void VGATextController::setResolution(VGATimings const& timings)
 
   s_blankPatternDWord = m_HVSync | (m_HVSync << 8) | (m_HVSync << 16) | (m_HVSync << 24);
 
-  if (s_fgbgPattern == nullptr) {
+  /*if (s_fgbgPattern == nullptr) {
     s_fgbgPattern = (uint32_t*) heap_caps_malloc(16384, MALLOC_CAP_8BIT);
     for (int i = 0; i < 16; ++i)
       for (int fg = 0; fg < 16; ++fg)
@@ -479,22 +366,26 @@ void VGATextController::setResolution(VGATimings const& timings)
                                                      (i & 0b0100 ? (fg_pat << 24) : (bg_pat << 24)) |
                                                      (i & 0b0010 ? (fg_pat << 0) : (bg_pat << 0)) |
                                                      (i & 0b0001 ? (fg_pat << 8) : (bg_pat << 8));
-        }
-  }
-
+						     }*/
+  //}  
 
   // ESP_INTR_FLAG_LEVEL1: should be less than PS2Controller interrupt level, necessary when running on the same core
-  CoreUsage::setBusiestCore(FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
-  esp_intr_alloc_pinnedToCore(ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, this, &m_isr_handle, FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
+  //CoreUsage::setBusiestCore(FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
 
-  m_GPIOStream.play(m_timings.frequency, m_DMABuffers);
 
+  esp_intr_alloc_args args = {ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, NULL, NULL, NULL};
+  xTaskCreatePinnedToCore(esp_intr_alloc_pinnedToCore_task, "" , 1024, &args, 3, NULL, BACKCORE);
+  // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+  
+  play_i2s(m_timings.frequency, m_DMABuffers);
+  
   I2S1.int_clr.val     = 0xFFFFFFFF;
   I2S1.int_ena.out_eof = 1;
 }
 
 
-void VGATextController::freeBuffers()
+void freeBuffers()
 {
   heap_caps_free( (void*) m_DMABuffers );
   heap_caps_free((void*) m_lines);
@@ -503,8 +394,7 @@ void VGATextController::freeBuffers()
   heap_caps_free((void*) m_syncLine);
 }
 
-
-uint8_t IRAM_ATTR VGATextController::packHVSync(bool HSync, bool VSync)
+uint8_t IRAM_ATTR packHVSync(bool HSync, bool VSync)
 {
   uint8_t hsync_value = (m_timings.HSyncLogic == '+' ? (HSync ? 1 : 0) : (HSync ? 0 : 1));
   uint8_t vsync_value = (m_timings.VSyncLogic == '+' ? (VSync ? 1 : 0) : (VSync ? 0 : 1));
@@ -512,13 +402,14 @@ uint8_t IRAM_ATTR VGATextController::packHVSync(bool HSync, bool VSync)
 }
 
 
-uint8_t IRAM_ATTR VGATextController::preparePixelWithSync(RGB222 rgb, bool HSync, bool VSync)
+uint8_t IRAM_ATTR preparePixelWithSync(RGB222 rgb, bool HSync, bool VSync)
 {
   return packHVSync(HSync, VSync) | (rgb.B << VGA_BLUE_BIT) | (rgb.G << VGA_GREEN_BIT) | (rgb.R << VGA_RED_BIT);
+  
 }
 
 
-void VGATextController::fillDMABuffers()
+void fillDMABuffers()
 {
   int x = 0;
   for (; x < m_timings.HFrontPorch; ++x) {
@@ -538,57 +429,55 @@ void VGATextController::fillDMABuffers()
     VGA_PIXELINROW(m_blankLine, x) = preparePixelWithSync((RGB222){0, 0, 0}, false, false);
     VGA_PIXELINROW(m_syncLine, x)  = preparePixelWithSync((RGB222){0, 0, 0}, false, true);
     for (int i = 0; i < VGATextController_CHARHEIGHT; ++i)
-      VGA_PIXELINROW( ((uint8_t*)(m_lines) + i * VGATextController_WIDTH), rx)  = preparePixelWithSync((RGB222){0, 0, 0}, false, false);
+      VGA_PIXELINROW( ((uint8_t*)(m_lines) + i * VGATextController_WIDTH), rx)  = preparePixelWithSync((RGB222){0, 2, 0}, false, false);
   }
+
+
 }
 
 
-void IRAM_ATTR VGATextController::I2SInterrupt(void * arg)
+static void IRAM_ATTR I2SInterrupt(void * arg)
 {
-  #ifdef VGATextController_PERFORMANCE_CHECK
-  auto s1 = getCycleCount();
-  #endif
+  //VGATextController * ctrl = (VGATextController *) arg;
 
-  VGATextController * ctrl = (VGATextController *) arg;
+  //if (I2S1.int_st.out_eof) { // && ctrl->m_charData != nullptr) {
 
-  if (I2S1.int_st.out_eof && ctrl->m_charData != nullptr) {
+    //volatile lldesc_t *desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
 
-    auto desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
+    //    if (desc == s_frameResetDesc) {
 
-    if (desc == s_frameResetDesc) {
+      //      s_scanLine = 0;
+      //      s_textRow  = 0;
+      //s_upperRow = true;
 
-      s_scanLine = 0;
-      s_textRow  = 0;
-      s_upperRow = true;
-
-      if (ctrl->m_cursorEnabled) {
+      /*      if (ctrl->m_cursorEnabled) {
         ++ctrl->m_cursorCounter;
         if (ctrl->m_cursorCounter >= ctrl->m_cursorSpeed)
           ctrl->m_cursorCounter = -ctrl->m_cursorSpeed;
-      }
+	  }*/
 
-      if (ctrl->m_map == nullptr) {
-        I2S1.int_clr.val = I2S1.int_st.val;
-        #ifdef VGATextController_PERFORMANCE_CHECK
-        s_cycles += getCycleCount() - s1;
-        #endif
-        return;
-      }
+      // if (ctrl->m_map == nullptr) {
+      //  I2S1.int_clr.val = I2S1.int_st.val;
+      //  #ifdef VGATextController_PERFORMANCE_CHECK
+      //  s_cycles += getCycleCount() - s1;
+      //  #endif
+      //  return;
+      //}
 
-    } else if (s_scanLine == 0) {
+    // } //else if (s_scanLine == 0) {
       // out of sync, wait for next frame
-      I2S1.int_clr.val = I2S1.int_st.val;
-      #ifdef VGATextController_PERFORMANCE_CHECK
-      s_cycles += getCycleCount() - s1;
-      #endif
-      return;
-    }
+      //I2S1.int_clr.val = I2S1.int_st.val;
+      //#ifdef VGATextController_PERFORMANCE_CHECK
+      //s_cycles += getCycleCount() - s1;
+      //#endif
+      //return;
+    // }
 
-    int scanLine = s_scanLine;
+    //     int scanLine = s_scanLine;
 
-    const int lineIndex = scanLine % VGATextController_CHARHEIGHT;
+     //    const int lineIndex = scanLine % VGATextController_CHARHEIGHT;
 
-    auto lines = ctrl->m_lines;
+     /*auto lines = ctrl->m_lines;
 
     if (s_textRow < ctrl->m_rows) {
 
@@ -680,30 +569,140 @@ void IRAM_ATTR VGATextController::I2SInterrupt(void * arg)
         }
       }
     }
+     */
+    //    scanLine += VGATextController_CHARHEIGHT / 2;
 
-    scanLine += VGATextController_CHARHEIGHT / 2;
+    //    s_scanLine = scanLine;
 
-    s_scanLine = scanLine;
+    //}
 
-  }
-
-  #ifdef VGATextController_PERFORMANCE_CHECK
-  s_cycles += getCycleCount() - s1;
-  #endif
+  // #ifdef VGATextController_PERFORMANCE_CHECK
+  //s_cycles += getCycleCount() - s1;
+  //#endif
 
   I2S1.int_clr.val = I2S1.int_st.val;
 }
 
-  bool                   m_cursorEnabled;
-  int                    m_cursorCounter; // trip from -m_cursorSpeed to +m_cursorSpeed (>= cursor is visible)
-  int                    m_cursorSpeed;
-  int                    m_cursorRow;
-  int                    m_cursorCol;
-  uint8_t                m_cursorForeground;
-  uint8_t                m_cursorBackground;
+
+/*****************************************************************************************
+******************************************************************************************************
+* 
+* 
+* 
+* */
+
+
+#include <alloca.h>
+#include <stdarg.h>
+#include <math.h>
+#include <string.h>
+
+
+// modeline syntax:
+//   "label" clock_mhz hdisp hsyncstart hsyncend htotal vdisp vsyncstart vsyncend vtotal (+HSync | -HSync) (+VSync | -VSync) [DoubleScan | QuadScan] [FrontPorchBegins | SyncBegins | BackPorchBegins | VisibleBegins] [MultiScanBlank]
+bool convertModelineToTimings(char const * modeline, VGATimings * timings)
+{
+  float freq;
+  int hdisp, hsyncstart, hsyncend, htotal, vdisp, vsyncstart, vsyncend, vtotal;
+  char HSyncPol = 0, VSyncPol = 0;
+  int pos = 0;
+
+  int count = sscanf(modeline, "\"%[^\"]\" %g %d %d %d %d %d %d %d %d %n", timings->label, &freq, &hdisp, &hsyncstart, &hsyncend, &htotal, &vdisp, &vsyncstart, &vsyncend, &vtotal, &pos);
+
+  if (count == 10 && pos > 0) {
+
+    timings->frequency      = freq * 1000000;
+    timings->HVisibleArea   = hdisp;
+    timings->HFrontPorch    = hsyncstart - hdisp;
+    timings->HSyncPulse     = hsyncend - hsyncstart;
+    timings->HBackPorch     = htotal - hsyncend;
+    timings->VVisibleArea   = vdisp;
+    timings->VFrontPorch    = vsyncstart - vdisp;
+    timings->VSyncPulse     = vsyncend - vsyncstart;
+    timings->VBackPorch     = vtotal - vsyncend;
+    timings->HSyncLogic     = '-';
+    timings->VSyncLogic     = '-';
+    timings->scanCount      = 1;
+    timings->multiScanBlack = 0;
+    timings->HStartingBlock = FrontPorch;
+
+    // get (+HSync | -HSync) (+VSync | -VSync)
+    char const * pc = modeline + pos;
+    for (; *pc; ++pc) {
+      if (*pc == '+' || *pc == '-') {
+        if (!HSyncPol)
+          timings->HSyncLogic = HSyncPol = *pc;
+        else if (!VSyncPol) {
+          timings->VSyncLogic = VSyncPol = *pc;
+          while (*pc && *pc != ' ')
+            ++pc;
+          break;
+        }
+      }
+    }
+
+    // get [DoubleScan | QuadScan] [FrontPorchBegins | SyncBegins | BackPorchBegins | VisibleBegins] [MultiScanBlank]
+    // actually this gets only the first character
+    while (*pc) {
+      switch (*pc) {
+        case 'D':
+        case 'd':
+          timings->scanCount = 2;
+          break;
+        case 'Q':
+        case 'q':
+          timings->scanCount = 4;
+          break;
+        case 'F':
+        case 'f':
+          timings->HStartingBlock = FrontPorch;
+          break;
+        case 'S':
+        case 's':
+          timings->HStartingBlock = Sync;
+          break;
+        case 'B':
+        case 'b':
+          timings->HStartingBlock = BackPorch;
+          break;
+        case 'V':
+        case 'v':
+          timings->HStartingBlock = VisibleArea;
+          break;
+        case 'M':
+        case 'm':
+          timings->multiScanBlack = 1;
+          break;
+        case ' ':
+          ++pc;
+          continue;
+      }
+      ++pc;
+      while (*pc && *pc != ' ')
+        ++pc;
+    }
+
+    return true;
+
+  }
+  return false;
+}
 
 
 
+  
+/*void app_main(){
+  m_rows = 34;
+  m_map  = NULL;
+  printf("Error starting\n");
+  begin();
+  setResolution();
+  while (1) {
+    vTaskDelay(100);
+    printf("this is the counter: %d\n", counter);
+    printf("scanline: %d\n", s_scanLine);
+  }
+  
+  }*/
 
-
-
+  

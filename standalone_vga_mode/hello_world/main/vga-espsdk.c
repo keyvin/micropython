@@ -1,3 +1,12 @@
+//This code is entirely derived from FABGL
+//http://www.fabglib.org/
+//Full Credit to Fabrizio Di Vittorio
+//I never would have attempted to understand something like
+//this without
+//such high quality and re-usable code.
+//Assume that all code in this module is licensed GPLv3
+
+
 //requires latest SDK for proper operation. 
 
 

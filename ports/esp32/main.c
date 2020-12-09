@@ -186,10 +186,10 @@ void app_main(void) {
 
     xTaskCreatePinnedToCore(mp_task, "mp_task", MP_TASK_STACK_SIZE / sizeof(StackType_t), NULL, MP_TASK_PRIORITY, &mp_main_task_handle, MP_TASK_COREID);
     //--ili9341 integration
-    init_screen();
-    //-vga and i2s integration
-    //    begin();
-    //    setResolution();
+    //    init_screen();
+    //vga and i2s integration
+    begin();
+    setResolution();
 }
 
 void nlr_jump_fail(void *val) {

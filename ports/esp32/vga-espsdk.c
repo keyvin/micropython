@@ -8,12 +8,9 @@
 
 
 //requires latest SDK for proper operation. 
-
-
 #include "freertos/FreeRTOS.h"
 #include "driver/gpio.h"
-//#include "rom/lldesc.h"
-#include "esp32/rom/lldesc.h"
+#include "rom/lldesc.h"
 #include "esp_heap_caps.h"
 #include "driver/i2s.h"
 #include "freertos/queue.h"
@@ -21,6 +18,8 @@
 #include "soc/i2s_struct.h"
 #include "soc/i2s_reg.h"
 #include "driver/periph_ctrl.h"
+#include "font_8x14.h"
+#include <string.h>
 #define BACKCORE 0
 
 #include "configure_i2s.h"
@@ -50,11 +49,35 @@ typedef struct RGBT {
   uint8_t B: 2;
 } RGB222;
     
+
+//necessary for the underline, bold, blank attributes
+/*
+#define GLYPHMAP_INDEX_BIT    0
+#define GLYPHMAP_BGCOLOR_BIT  8
+#define GLYPHMAP_FGCOLOR_BIT 12
+#define GLYPHMAP_OPTIONS_BIT 16
+#define GLYPHMAP_ITEM_MAKE(index, bgColor, fgColor, options) (((uint32_t)(index) << GLYPHMAP_INDEX_BIT) | ((uint32_t)(bgColor) << GLYPHMAP_BGCOLOR_BIT) | ((uint32_t)(fgColor) << GLYPHMAP_FGCOLOR_BIT) | ((uint32_t)((options).value) << GLYPHMAP_OPTIONS_BIT))
+
+inline uint8_t glyphMapItem_getIndex(uint32_t const volatile * mapItem) { return *mapItem >> GLYPHMAP_INDEX_BIT & 0xFF; }
+inline uint8_t glyphMapItem_getIndex(uint32_t const & mapItem)          { return mapItem >> GLYPHMAP_INDEX_BIT & 0xFF; }
+
+inline Color glyphMapItem_getBGColor(uint32_t const volatile * mapItem) { return (Color)(*mapItem >> GLYPHMAP_BGCOLOR_BIT & 0x0F); }
+inline Color glyphMapItem_getBGColor(uint32_t const & mapItem)          { return (Color)(mapItem >> GLYPHMAP_BGCOLOR_BIT & 0x0F); }
+
+inline Color glyphMapItem_getFGColor(uint32_t const volatile * mapItem) { return (Color)(*mapItem >> GLYPHMAP_FGCOLOR_BIT & 0x0F); }
+inline Color glyphMapItem_getFGColor(uint32_t const & mapItem)          { return (Color)(mapItem >> GLYPHMAP_FGCOLOR_BIT & 0x0F); }
+
+inline GlyphOptions glyphMapItem_getOptions(uint32_t const volatile * mapItem) { return (GlyphOptions){.value = (uint16_t)(*mapItem >> GLYPHMAP_OPTIONS_BIT & 0xFFFF)}; }
+inline GlyphOptions glyphMapItem_getOptions(uint32_t const & mapItem)          { return (GlyphOptions){.value = (uint16_t)(mapItem >> GLYPHMAP_OPTIONS_BIT & 0xFFFF)}; }
+
+*/
+
 void configureGPIO(gpio_num_t gpio, gpio_mode_t mode)
 {
   PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
   gpio_set_direction(gpio, mode);
 }
+
 
 void esp_intr_alloc_pinnedToCore_task(void * arg)
 {
@@ -63,6 +86,8 @@ void esp_intr_alloc_pinnedToCore_task(void * arg)
   //  xTaskNotifyGive(args->waitingTask);
   vTaskDelete(NULL);
 }
+
+
 
 //defines for vga text mode
 #define VGATextController_CHARWIDTH      8    // max 8
@@ -139,8 +164,8 @@ typedef struct VGATImings {
   uint8_t       m_HVSync;
 
   uint8_t *              m_charData;
-  uint32_t const *       m_map;
-
+uint32_t *       m_map;
+static uint8_t m_screenContents[80*34];
   // cursor props
   bool                   m_cursorEnabled;
   int                    m_cursorCounter; // trip from -m_cursorSpeed to +m_cursorSpeed (>= cursor is visible)
@@ -165,13 +190,32 @@ void init(gpio_num_t VSyncGPIO)
 {
   m_DMABuffers = nullptr;
   init_i2s_module();
+  m_rows = 34;
 
+  for (int i=0; i < (80*34); i++)
+    m_screenContents[i] = '/'+(i%10);
   // load font into RAM
-  // int charDataSize = 256 * FONT_8x14.height * ((FONT_8x14.width + 7) / 8);
-  //  m_charData = (uint8_t*) heap_caps_malloc(charDataSize, MALLOC_CAP_8BIT);
-  //  memcpy(m_charData, FONT_8x14.data, charDataSize);
+  int charDataSize = 256 * FONT_8x14.height * ((FONT_8x14.width + 7) / 8);
+  m_charData = (uint8_t*) heap_caps_malloc(charDataSize, MALLOC_CAP_8BIT);
+  memcpy(m_charData, FONT_8x14.data, charDataSize);
+
+  //usually this is 32 bits for fabgl.. 8 bits of attributes. 8 bits of character data
+  //processed 2 glyphs/characters on the screen at a time. 
+  //  m_map = (uint32_t *) heap_caps_malloc(sizeof(uint32_t)*40*32, MALLOC_CAP_8BIT);
+					//  #define VGATextController_COLUMNS        80
+					//  #define VGATextController_ROWS           34
+  s_fgbgPattern = NULL;
 }
 
+//rows fixed at 34.
+void update_text(uint8_t const *char_data){
+  // wait for the end of frame
+  // Wait for vblank.
+  while (s_scanLine < m_timings.VVisibleArea)
+    ;
+  
+  memcpy(m_screenContents, char_data, sizeof(uint8_t)*80*34);
+}
 
 
 void bbegin(gpio_num_t redGPIO, gpio_num_t greenGPIO, gpio_num_t blueGPIO, gpio_num_t HSyncGPIO, gpio_num_t VSyncGPIO)
@@ -354,26 +398,38 @@ void setResolution()
   s_scanLine = 0;
 
   s_blankPatternDWord = m_HVSync | (m_HVSync << 8) | (m_HVSync << 16) | (m_HVSync << 24);
-
-  /*if (s_fgbgPattern == nullptr) {
+  //s_white_on_back
+  //16kb we probably don't need.
+  RGB222 white_f= {2, 2,2};
+  RGB222 black_bg = {0,0,0};
+  if (s_fgbgPattern == NULL) {
     s_fgbgPattern = (uint32_t*) heap_caps_malloc(16384, MALLOC_CAP_8BIT);
     for (int i = 0; i < 16; ++i)
       for (int fg = 0; fg < 16; ++fg)
         for (int bg = 0; bg < 16; ++bg) {
-          uint8_t fg_pat = preparePixel(RGB222((Color)fg));
-          uint8_t bg_pat = preparePixel(RGB222((Color)bg));
+	  uint8_t fg_pat = preparePixel(white_f);
+	  uint8_t bg_pat = preparePixel(black_bg);
+	  //this is some kind of time saving thing in the interrupt handler
+	  //this stores the different colors so they don't have to be calced
+	  //in the time sensitive interrupt. I believe this is copied to the
+	  //i2s DMA buffer if the bit in the bitmapped font character
+	  //is enabled. Or maybe this is all possible combinations of characters
+
           s_fgbgPattern[i | (bg << 4) | (fg << 8)] = (i & 0b1000 ? (fg_pat << 16) : (bg_pat << 16)) |
                                                      (i & 0b0100 ? (fg_pat << 24) : (bg_pat << 24)) |
                                                      (i & 0b0010 ? (fg_pat << 0) : (bg_pat << 0)) |
                                                      (i & 0b0001 ? (fg_pat << 8) : (bg_pat << 8));
-						     }*/
-  //}  
+	}
+    
+    //s_fgbgPattern[i | (bg <<4)| (fg << 8)] = s_blankPatternDWord;
+  }
+  
 
-  // ESP_INTR_FLAG_LEVEL1: should be less than PS2Controller interrupt level, necessary when running on the same core
+    // ESP_INTR_FLAG_LEVEL1: should be less than PS2Controller interrupt level, necessary when running on the same core
   //CoreUsage::setBusiestCore(FABGLIB_VIDEO_CPUINTENSIVE_TASKS_CORE);
 
 
-  esp_intr_alloc_args args = {ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, NULL, NULL, NULL};
+    esp_intr_alloc_args args = {ETS_I2S1_INTR_SOURCE, ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM, I2SInterrupt, NULL, NULL, NULL};
   xTaskCreatePinnedToCore(esp_intr_alloc_pinnedToCore_task, "" , 1024, &args, 3, NULL, BACKCORE);
   // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
@@ -439,48 +495,52 @@ void fillDMABuffers()
 static void IRAM_ATTR I2SInterrupt(void * arg)
 {
   //VGATextController * ctrl = (VGATextController *) arg;
+  //m_charData is the font
+  if (I2S1.int_st.out_eof &&  m_charData != nullptr) {
 
-  //if (I2S1.int_st.out_eof) { // && ctrl->m_charData != nullptr) {
+    volatile lldesc_t *desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
 
-    //volatile lldesc_t *desc = (volatile lldesc_t*) I2S1.out_eof_des_addr;
-
-    //    if (desc == s_frameResetDesc) {
-
-      //      s_scanLine = 0;
-      //      s_textRow  = 0;
-      //s_upperRow = true;
-
+    if (desc == s_frameResetDesc) {
+      //reset scanline count
+      s_scanLine = 0;
+      s_textRow  = 0;
+      s_upperRow = true;
+      //no cursor for now.
       /*      if (ctrl->m_cursorEnabled) {
         ++ctrl->m_cursorCounter;
         if (ctrl->m_cursorCounter >= ctrl->m_cursorSpeed)
           ctrl->m_cursorCounter = -ctrl->m_cursorSpeed;
 	  }*/
-
-      // if (ctrl->m_map == nullptr) {
+      /* we know this is set
+      // if (ctrl->m_mapls == nullptr) {
       //  I2S1.int_clr.val = I2S1.int_st.val;
       //  #ifdef VGATextController_PERFORMANCE_CHECK
       //  s_cycles += getCycleCount() - s1;
       //  #endif
       //  return;
-      //}
+      //}*/
 
-    // } //else if (s_scanLine == 0) {
-      // out of sync, wait for next frame
-      //I2S1.int_clr.val = I2S1.int_st.val;
+     } else if (s_scanLine == 0) {
+      //out of sync, wait for next frame
+      //this means we are in the DMA buffer somewhere in the middle of the screen
+      //but the scanline is at zero. We should keep the DMA playback going
+      //eventually we will hit the end of the buffers and pass to the rest of the code. 
+      I2S1.int_clr.val = I2S1.int_st.val;
       //#ifdef VGATextController_PERFORMANCE_CHECK
       //s_cycles += getCycleCount() - s1;
       //#endif
-      //return;
-    // }
+      return;
+    }
+    //process data to put in buffers.
+    int scanLine = s_scanLine;
 
-    //     int scanLine = s_scanLine;
-
-     //    const int lineIndex = scanLine % VGATextController_CHARHEIGHT;
-
-     /*auto lines = ctrl->m_lines;
-
-    if (s_textRow < ctrl->m_rows) {
-
+    const int lineIndex = scanLine % VGATextController_CHARHEIGHT;
+    //This buffer is 8 bit accessible, and looks to be big enough to hold 16 lines of data
+    //which is the height of one line
+    uint32_t *lines = m_lines;
+    //This is the number of rows in the character data we are rendering. 
+    if (s_textRow< m_rows) {
+      /* This code sets up the buffers to show the cursor. 
       int cursorCol = 0;
       int cursorFGBG = 0;
       const auto cursorVisible = (ctrl->m_cursorEnabled && ctrl->m_cursorCounter >= 0 && s_textRow == ctrl->m_cursorRow);
@@ -488,30 +548,33 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
         cursorCol  = ctrl->m_cursorCol;
         cursorFGBG = (ctrl->m_cursorForeground << 4) | (ctrl->m_cursorBackground << 8);
       }
+      */
+      //this is the font data
+      uint8_t *charData = m_charData + (s_upperRow ? 0 : VGATextController_CHARHEIGHT / 2);
+      //this is the contents of the screen. 
+      //uint32_t *mapItemPtr = m_map + (s_textRow * VGATextController_COLUMNS);
 
-      const auto charData = ctrl->m_charData + (s_upperRow ? 0 : VGATextController_CHARHEIGHT / 2);
-      auto mapItemPtr = ctrl->m_map + s_textRow * VGATextController_COLUMNS;
+      for (int col = 0; col < VGATextController_COLUMNS; ++col) {
 
-      for (int col = 0; col < VGATextController_COLUMNS; ++col, ++mapItemPtr) {
+	//        uint32_t mapItem = *mapItemPtr;
 
-        const auto mapItem = *mapItemPtr;
+	//	int fgbg = (mapItem >> 4) & 0b111111110000;
 
-        int fgbg = (mapItem >> 4) & 0b111111110000;
-
-        const auto options = glyphMapItem_getOptions(mapItem);
+	//const auto options = glyphMapItem_getOptions(mapItem);
 
         // invert?
-        if (options.invert)
-          fgbg = ((fgbg >> 4) & 0b11110000) | ((fgbg << 4) & 0b111100000000);
+	//        if (options.invert)
+	//          fgbg = ((fgbg >> 4) & 0b11110000) | ((fgbg << 4) & 0b111100000000);
 
         // cursor?
-        if (cursorVisible && col == cursorCol)
-          fgbg = cursorFGBG;
+	//        if (cursorVisible && col == cursorCol)
+	//          fgbg = cursorFGBG;
 
         uint32_t * dest = lines + lineIndex * VGATextController_WIDTH / sizeof(uint32_t) + col * VGATextController_CHARWIDTHBYTES * 2;
 
-        // blank?
-        if (options.blank) {
+        //the data has either a space or no data, so there is nothing to copy here. essentially
+	//non printing characters.
+	/*        if (options.blank) {
 
           for (int rowInChar = 0; rowInChar < VGATextController_CHARHEIGHT / 2; ++rowInChar) {
             int v = s_fgbgPattern[fgbg];
@@ -520,66 +583,69 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
             dest += VGATextController_WIDTH / sizeof(uint32_t);
           }
 
-        } else {
-
-          const bool underline = (s_upperRow == false && options.underline);
-          const bool bold      = options.bold;
-
-          auto charRowPtr = charData + glyphMapItem_getIndex(mapItem) * VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES;
-
-          for (int rowInChar = 0; rowInChar < VGATextController_CHARHEIGHT / 2; ++rowInChar) {
-            auto charRowData = *charRowPtr;
-
-            // bold?
-            if (bold)
-              charRowData |= charRowData >> 1;
-
-            *dest       = s_fgbgPattern[(charRowData >> 4)  | fgbg];
-            *(dest + 1) = s_fgbgPattern[(charRowData & 0xF) | fgbg];
-
-            dest += VGATextController_WIDTH / sizeof(uint32_t);
-            charRowPtr += VGATextController_CHARWIDTHBYTES;
-          }
-
-          // underline?
-          if (underline) {
-            dest -= VGATextController_WIDTH / sizeof(uint32_t);
+	  } */
+	
+	//this sets the buffers to their proper values.
+	//	const bool underline = (s_upperRow == false && options.underline);
+	//	const bool bold      = options.bold;
+	//40ths character
+	uint8_t *charRowPtr = charData + m_screenContents[(s_textRow*VGATextController_COLUMNS)+col]*  VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES;
+	
+	for (int rowInChar = 0; rowInChar < VGATextController_CHARHEIGHT / 2; ++rowInChar) {
+	  //this is the bitmap for this row of the  character in the font.
+	  uint8_t charRowData = *charRowPtr;
+	    
+	    //            // bold?
+	    //            if (bold)
+	  //            charRowData |= charRowData >> 1;
+	  //delete the | ffbg 
+	  *dest       = s_fgbgPattern[(charRowData >> 4)];
+	  *(dest + 1) = s_fgbgPattern[(charRowData & 0xF)];
+	  
+	  dest += VGATextController_WIDTH / sizeof(uint32_t);
+	  charRowPtr += VGATextController_CHARWIDTHBYTES;
+	}
+	  
+	// underline - "rewind" dest and add the underline?
+	
+	/*if (underline) {
+	  dest -= VGATextController_WIDTH / sizeof(uint32_t);
             uint32_t v = s_fgbgPattern[0xF | fgbg];
             *dest       = v;
             *(dest + 1) = v;
-          }
-
-        }
-
+	    }*/
+	
+	  
+	
       }
-
+      
       if (s_upperRow) {
-        s_upperRow = false;
+	s_upperRow = false;
       } else {
-        s_upperRow = true;
-        ++s_textRow;
+	s_upperRow = true;
+	++s_textRow;
       }
-
+      
     } else {
+      //we've hit the end of the text buffer we are rendering. Just fill with blank lines. 
       for (int i = 0; i < VGATextController_CHARHEIGHT / 2; ++i) {
-        auto dest = lines + ((scanLine + i) % VGATextController_CHARHEIGHT) * VGATextController_WIDTH / sizeof(uint32_t);
-        for (int i = 0; i < VGATextController_COLUMNS; ++i) {
-          *dest++ = s_blankPatternDWord;
-          *dest++ = s_blankPatternDWord;
-        }
+	uint32_t *dest = lines + ((scanLine + i) % VGATextController_CHARHEIGHT) * VGATextController_WIDTH / sizeof(uint32_t);
+	for (int i = 0; i < VGATextController_COLUMNS; ++i) {
+	  *dest++ = s_blankPatternDWord;
+	  *dest++ = s_blankPatternDWord;
+	}
       }
     }
-     */
-    //    scanLine += VGATextController_CHARHEIGHT / 2;
-
-    //    s_scanLine = scanLine;
-
-    //}
-
+     
+    scanLine += VGATextController_CHARHEIGHT / 2;
+    s_scanLine = scanLine;
+    
+  }
+  
   // #ifdef VGATextController_PERFORMANCE_CHECK
   //s_cycles += getCycleCount() - s1;
   //#endif
-
+  
   I2S1.int_clr.val = I2S1.int_st.val;
 }
 
@@ -690,8 +756,9 @@ bool convertModelineToTimings(char const * modeline, VGATimings * timings)
 
 
 
-  
-/*void app_main(){
+/*  
+void app_main(){
+  //this is in init
   m_rows = 34;
   m_map  = NULL;
   printf("Error starting\n");

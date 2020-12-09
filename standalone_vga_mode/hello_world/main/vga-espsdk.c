@@ -190,7 +190,10 @@ void init(gpio_num_t VSyncGPIO)
 {
   m_DMABuffers = nullptr;
   init_i2s_module();
+  m_rows = 34;
 
+  for (int i=0; i < (80*34); i++)
+    m_screenContents[i] = '/'+(i%10);
   // load font into RAM
   int charDataSize = 256 * FONT_8x14.height * ((FONT_8x14.width + 7) / 8);
   m_charData = (uint8_t*) heap_caps_malloc(charDataSize, MALLOC_CAP_8BIT);
@@ -198,7 +201,7 @@ void init(gpio_num_t VSyncGPIO)
 
   //usually this is 32 bits for fabgl.. 8 bits of attributes. 8 bits of character data
   //processed 2 glyphs/characters on the screen at a time. 
-  m_map = (uint32_t *) heap_caps_malloc(sizeof(uint32_t)*40*32, MALLOC_CAP_8BIT);
+  //  m_map = (uint32_t *) heap_caps_malloc(sizeof(uint32_t)*40*32, MALLOC_CAP_8BIT);
 					//  #define VGATextController_COLUMNS        80
 					//  #define VGATextController_ROWS           34
   s_fgbgPattern = NULL;
@@ -509,7 +512,7 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
           ctrl->m_cursorCounter = -ctrl->m_cursorSpeed;
 	  }*/
       /* we know this is set
-      // if (ctrl->m_map == nullptr) {
+      // if (ctrl->m_mapls == nullptr) {
       //  I2S1.int_clr.val = I2S1.int_st.val;
       //  #ifdef VGATextController_PERFORMANCE_CHECK
       //  s_cycles += getCycleCount() - s1;
@@ -549,13 +552,13 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
       //this is the font data
       uint8_t *charData = m_charData + (s_upperRow ? 0 : VGATextController_CHARHEIGHT / 2);
       //this is the contents of the screen. 
-      uint32_t *mapItemPtr = m_map + (s_textRow * VGATextController_COLUMNS);
+      //uint32_t *mapItemPtr = m_map + (s_textRow * VGATextController_COLUMNS);
 
-      for (int col = 0; col < VGATextController_COLUMNS; ++col, ++mapItemPtr) {
+      for (int col = 0; col < VGATextController_COLUMNS; ++col) {
 
-        uint32_t mapItem = *mapItemPtr;
+	//        uint32_t mapItem = *mapItemPtr;
 
-        int fgbg = (mapItem >> 4) & 0b111111110000;
+	//	int fgbg = (mapItem >> 4) & 0b111111110000;
 
 	//const auto options = glyphMapItem_getOptions(mapItem);
 
@@ -567,7 +570,7 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
 	//        if (cursorVisible && col == cursorCol)
 	//          fgbg = cursorFGBG;
 
-        uint32_t * dest = lines + (lineIndex * VGATextController_WIDTH / sizeof(uint32_t)) + col * VGATextController_CHARWIDTHBYTES * 2;
+        uint32_t * dest = lines + lineIndex * VGATextController_WIDTH / sizeof(uint32_t) + col * VGATextController_CHARWIDTHBYTES * 2;
 
         //the data has either a space or no data, so there is nothing to copy here. essentially
 	//non printing characters.
@@ -586,7 +589,7 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
 	//	const bool underline = (s_upperRow == false && options.underline);
 	//	const bool bold      = options.bold;
 	//40ths character
-	uint8_t *charRowPtr = charData + (m_screenContents[(s_textRow*VGATextController_ROWS)+col]*  VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES);
+	uint8_t *charRowPtr = charData + m_screenContents[(s_textRow*VGATextController_COLUMNS)+col]*  VGATextController_CHARHEIGHT * VGATextController_CHARWIDTHBYTES;
 	
 	for (int rowInChar = 0; rowInChar < VGATextController_CHARHEIGHT / 2; ++rowInChar) {
 	  //this is the bitmap for this row of the  character in the font.
@@ -595,9 +598,9 @@ static void IRAM_ATTR I2SInterrupt(void * arg)
 	    //            // bold?
 	    //            if (bold)
 	  //            charRowData |= charRowData >> 1;
-	    
-	  *dest       = s_fgbgPattern[(charRowData >> 4)  | fgbg];
-	  *(dest + 1) = s_fgbgPattern[(charRowData & 0xF) | fgbg];
+	  //delete the | ffbg 
+	  *dest       = s_fgbgPattern[(charRowData >> 4)];
+	  *(dest + 1) = s_fgbgPattern[(charRowData & 0xF)];
 	  
 	  dest += VGATextController_WIDTH / sizeof(uint32_t);
 	  charRowPtr += VGATextController_CHARWIDTHBYTES;
@@ -755,19 +758,18 @@ bool convertModelineToTimings(char const * modeline, VGATimings * timings)
 
   
 void app_main(){
+  //this is in init
   m_rows = 34;
   m_map  = NULL;
   printf("Error starting\n");
   begin();
   setResolution();
-  for (int i = 0; i < 80*34; i++)
-    m_screenContents[i] = 0x40;
   while (1) {
     vTaskDelay(100);
     printf("this is the counter: %d\n", counter);
     printf("scanline: %d\n", s_scanLine);
   }
   
-}
+ }
 
   

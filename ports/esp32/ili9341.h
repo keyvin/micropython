@@ -29,17 +29,17 @@ uint8_t text_console_column;
 
 
 enum GFX_MODE gfx_mode;
-#define PIN_NUM_MISO 25
+#define PIN_NUM_MISO 19
 #define PIN_NUM_MOSI 23
-#define PIN_NUM_CLK  19
-#define PIN_NUM_CS   22
+#define PIN_NUM_CLK  18
+#define PIN_NUM_CS   5
 #define PIN_NUM_DC   21
-#define PIN_NUM_RST  18
-#define PIN_NUM_BCKL 5
+#define PIN_NUM_RST  15
+#define PIN_NUM_BCKL 14
 
 #define MAX_RECT 50*50
 #define MAX_LINES 16 //320 width
-
+#define LINE_WIDTH 480
 
 
 /*
@@ -118,6 +118,23 @@ DRAM_ATTR static const lcd_init_cmd_t ili_init_cmds[]={
     {0x29, {0}, 0x80},
     {0, {0}, 0xff},
 };
+
+DRAM_ATTR static const lcd_init_cmd_t st_init_cmds[]={
+
+//sware reset
+    {0x01,{0},0x80},
+    //madctl -- set orientation
+    {0x36, {0x28}, 1},
+    //pixel format - rgb 656
+    {0x3A, {0x05}, 1},
+    {0x11, {0},0x80},
+    {0x38, {0}, 0},
+    {0x13, {0}, 0},
+    {0x29, {0}, 0x80},
+    {0x2C, {0}, 0x80},
+    {0, {0}, 0xff}
+};
+
 
 
 static char font8x8_basic[128][8] = {

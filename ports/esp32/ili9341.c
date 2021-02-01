@@ -24,7 +24,7 @@ void start_text_mode() {
   if (lines[1])
     free(lines[1]);
   for (int i=0; i<2; i++) {
-    lines[i]=heap_caps_malloc( MAX_LINES * (320 *sizeof(uint16_t)), MALLOC_CAP_DMA);
+    lines[i]=heap_caps_malloc( MAX_LINES * (LINE_WIDTH *sizeof(uint16_t)), MALLOC_CAP_DMA);
     assert(lines[i]!=NULL);
   }
   //generate fonts at gfx_high_mem
@@ -64,7 +64,7 @@ void fill_line(uint16_t *buffer, const char *text, uint8_t length){
   }
   //full window size (320px)
   else {
-    ili_window_size=320; //320/16 =20 (0..19)
+    ili_window_size=LINE_WIDTH; //320/16 =20 (0..19)
   }
   while (position < length){     
     uint16_t *char_loc = ((uint16_t *) gfx_high) + (text[position] * FONT_SIZE*FONT_SIZE)-FONT_SIZE;
@@ -72,7 +72,7 @@ void fill_line(uint16_t *buffer, const char *text, uint8_t length){
     for (int j = 0; j < FONT_SIZE; j++){ //0..15
       uint16_t row = j*ili_window_size;
       memcpy(buffer + row + col, char_loc+(j*FONT_SIZE),sizeof(uint16_t)*FONT_SIZE);
-      if ((row+col) > 16*320*2)printf("Buffer overrun\n");
+      if ((row+col) > 16*LINE_WIDTH*2)printf("Buffer overrun\n");
 
     }    
     position++;
@@ -145,18 +145,20 @@ void lcd_init(spi_device_handle_t spi)
 {
   int cmd=0;
   const lcd_init_cmd_t* lcd_init_cmds;
-  
+  printf("GPIO INITIALIZATION\n");
   //Initialize non-SPI GPIOs
   gpio_set_direction(PIN_NUM_DC, GPIO_MODE_OUTPUT);
   gpio_set_direction(PIN_NUM_RST, GPIO_MODE_OUTPUT);
   gpio_set_direction(PIN_NUM_BCKL, GPIO_MODE_OUTPUT);
-  
+  printf("Mode set\n");
   //Reset the display
-  gpio_set_level(PIN_NUM_RST, 0);
-  vTaskDelay(100 / portTICK_RATE_MS);
-  gpio_set_level(PIN_NUM_RST, 1);
-  vTaskDelay(100 / portTICK_RATE_MS);
-  lcd_init_cmds = ili_init_cmds;
+  //  gpio_set_level(PIN_NUM_RST, 0);
+  //vTaskDelay(100 / portTICK_RATE_MS);
+  //gpio_set_level(PIN_NUM_RST, 1);
+  //vTaskDelay(100 / portTICK_RATE_MS);
+  //TODO - EXPOSE THIS THROUGH MICROPYTHON
+  lcd_init_cmds = st_init_cmds;
+  printf("Commands loaded\n");
   
   
   //Send all the commands
@@ -166,11 +168,12 @@ void lcd_init(spi_device_handle_t spi)
         if (lcd_init_cmds[cmd].databytes&0x80) {
 	  vTaskDelay(100 / portTICK_RATE_MS);
         }
+	printf("cmd %d\n",cmd);
         cmd++;
   }
   
   ///Enable backlight - 0 for dev board, 1 for regular
-  gpio_set_level(PIN_NUM_BCKL, 0);
+  gpio_set_level(PIN_NUM_BCKL, 1);
 }
 
 
@@ -181,6 +184,7 @@ void lcd_init(spi_device_handle_t spi)
  * sent faster (compared to calling spi_device_transmit several times), and at
  * the mean while the lines for next transactions can get calculated.
  */
+
 void send_lines(spi_device_handle_t spi, uint16_t sx,uint16_t sy, uint16_t ex, uint16_t ey, uint16_t *linedata)
 {
   esp_err_t ret;
@@ -335,6 +339,7 @@ static void display_pretty_colors(spi_device_handle_t spi)
 
 
 
+
 void put_text_at(unsigned int row, unsigned int  col, const char *text, unsigned int len)
 {
   uint8_t multi_line = 0;
@@ -390,6 +395,30 @@ void put_text_at(unsigned int row, unsigned int  col, const char *text, unsigned
   }
 }
 
+static void clear_st7796s_screen(spi_device_handle_t spi)
+{
+    uint16_t *a_line;
+    //Allocate memory for the pixel buffers                                                                                     
+
+    printf("alloc buffer\n");
+    a_line=heap_caps_malloc(480*MAX_LINES*sizeof(uint16_t), MALLOC_CAP_DMA);
+
+
+    for  (int p=0; p<(480*16); p++) {
+      a_line[p]=0x0000;     
+    }
+    printf("Start send\n");
+    for (int a =0; a < 20; a++) {
+      send_lines(spi, 0,a*16 ,480, (a*16)+16, a_line);
+      send_line_finish(spi);
+      printf("Finished block\n");
+    }
+    printf("finish send\n");
+    // free(a_line);
+}
+
+
+
 
 void ili9341_spi_init()
 {
@@ -400,7 +429,7 @@ void ili9341_spi_init()
         .sclk_io_num=PIN_NUM_CLK,
         .quadwp_io_num=-1,
         .quadhd_io_num=-1,
-        .max_transfer_sz=16*320*2*8
+        .max_transfer_sz=16*LINE_WIDTH*2*8
     };
     spi_device_interface_config_t devcfg={
 #ifdef CONFIG_LCD_OVERCLOCK
@@ -410,18 +439,24 @@ void ili9341_spi_init()
 #endif
         .mode=0,                                //SPI mode 0
         .spics_io_num=PIN_NUM_CS,               //CS pin
-        .queue_size=7,                          //We want to be able to queue 7 transactions at a time
+        .queue_size=16,                          //We want to be able to queue 7 transactions at a time
         .pre_cb=lcd_spi_pre_transfer_callback,  //Specify pre-transfer callback to handle D/C line
 	.flags=SPI_DEVICE_NO_DUMMY
     };
     //Initialize the SPI bus
-    ret=spi_bus_initialize(HSPI_HOST, &buscfg, 1);
+    ret=spi_bus_initialize(VSPI_HOST, &buscfg, 1);
+    printf("pre-init\n");
     ESP_ERROR_CHECK(ret);
     //Attach the LCD to the SPI bus
-    ret=spi_bus_add_device(HSPI_HOST, &devcfg, &spi_handle);
+    ret=spi_bus_add_device(VSPI_HOST, &devcfg, &spi_handle);
     ESP_ERROR_CHECK(ret);
     //Initialize the LCD
+    printf("lcd-init\n");
     lcd_init(spi_handle);
-    ESP_ERROR_CHECK(ret);
+    //    ESP_ERROR_CHECK(ret);
+    printf("Initialized\n");
+
+    clear_st7796s_screen(spi_handle);
+
     start_text_mode();
 }

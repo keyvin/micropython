@@ -179,17 +179,19 @@ void app_main(void) {
         nvs_flash_init();
     }
     //  should set this up for a background driver. Just call init for now
-    //        ili9341_spi_init();
-	//    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0);
+ 
+//    xTaskCreatePinnedToCore(spi_init, "spi_task", 2056, NULL, MP_TASK_PRIORITY, NULL, 0);
     //background composite
 
-
+   
     xTaskCreatePinnedToCore(mp_task, "mp_task", MP_TASK_STACK_SIZE / sizeof(StackType_t), NULL, MP_TASK_PRIORITY, &mp_main_task_handle, MP_TASK_COREID);
-    //--ili9341 integration
-    //    init_screen();
+
+     ili9341_spi_init();
+   //--ili9341 integration
+    //init_screen();
     //vga and i2s integration
-    begin();
-    setResolution();
+    //begin();
+    //setResolution();
 }
 
 void nlr_jump_fail(void *val) {

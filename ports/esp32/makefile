@@ -1,6 +1,6 @@
 #ESPIDF ?= ~/esp-idf/
 BOARD ?= GENERIC_SPIRAM
-PORT ?= /dev/ttyUSB1
+PORT ?= /dev/ttyUSB0
 USER_C_MODULES ?=../../modules
 #FLASH_MODE ?= qio
 #FLASH_SIZE ?= 4MB
